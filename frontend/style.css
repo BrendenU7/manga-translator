@@ -223,4 +223,59 @@ label.check input { width: 16px; height: 16px; accent-color: var(--accent); }
 .key-row { display: flex; gap: 8px; }
 .key-row input { flex: 1; font-family: ui-monospace, monospace; font-size: 13px; }
 
-#cost-info { margin: 0 0 0 auto; padding-right: 8px; white-space: nowrap; }
+#cost-info { margin: 0 0 0 auto; padding-right: 4px; white-space: nowrap; }
+
+/* ------------------------------------------------------------------ results workspace
+   Once there are results, the page fits one screen: the upload box collapses to a bar,
+   pages scale to the window height, and the editor sits beside them on wide screens. */
+main.wide { max-width: 1680px; }
+.compact-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
+.compact-bar span { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compact-bar .button { margin-left: auto; padding: 6px 14px; }
+
+/* One slim row that sticks to the top while you work; pages are sized to fit below it */
+#result-panel { --bar-h: 52px; }
+.toolbar { position: sticky; top: 0; z-index: 20; min-height: var(--bar-h); flex-wrap: nowrap;
+  gap: 10px; padding: 6px 0; background: var(--bg); }
+.toolbar .button, .toolbar .seg button { padding: 6px 12px; font-size: 14px; }
+.toolbar .downloads { gap: 6px; flex-shrink: 0; }
+#cost-info { font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.page-nav { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.toolbar .page-nav .button { padding: 4px 11px; font-size: 18px; line-height: 1; }
+#page-pos { min-width: 64px; text-align: center; }
+
+#page-strip { padding: 8px 2px 2px; }
+.thumb { width: 64px; }
+.thumb img { height: 90px; }
+
+.workspace { display: grid; gap: 16px; align-items: start; margin-top: 10px; }
+@media (min-width: 1100px) {
+  .workspace { grid-template-columns: minmax(0, 1fr) 380px; }
+  /* The editor stays in view and scrolls on its own */
+  .editor { position: sticky; top: calc(var(--bar-h) + 8px); max-height: calc(100vh - var(--bar-h) - 16px);
+    overflow-y: auto; }
+  .bubble { grid-template-columns: 28px 1fr; }
+  .bubble textarea { grid-column: 2; }
+}
+#viewer { margin-top: 0; }
+/* Pages fit the window height instead of the column width */
+#viewer figure img { width: auto; max-width: 100%; max-height: calc(100vh - var(--bar-h) - 64px); margin: 0 auto; }
+#viewer figure { padding: 6px; }
+#viewer figcaption { padding-top: 2px; }
+main.wide { padding-top: 8px; }
+.compact-bar { padding: 8px 14px; }
+.compact-bar .button { padding: 5px 12px; font-size: 14px; }
+#viewer figure { display: flex; flex-direction: column; align-items: center; }
+#viewer.side { grid-template-columns: 1fr 1fr; }
+/* The slider frame only shows in Slider view (the #viewer figure rule above would show it) */
+#viewer:not(.slider) .compare-wrap { display: none; }
+.edit-actions { flex-wrap: wrap; }
+.edit-actions button { white-space: nowrap; }
+.edit-actions label { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.seg button { white-space: nowrap; }
+/* Narrow windows: let the toolbar wrap instead of squeezing */
+@media (max-width: 1099px) {
+  .toolbar { flex-wrap: wrap; position: static; }
+  #cost-info { order: 10; flex-basis: 100%; margin: 0; }
+  #viewer figure img { max-height: 80vh; }
+}

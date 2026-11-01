@@ -30,6 +30,11 @@
   </header>
 
   <main>
+    <section id="compact-bar" class="card compact-bar" hidden>
+      <span id="compact-text"></span>
+      <a class="button" href="/index.html">+ New translation</a>
+    </section>
+
     <section id="upload-panel" class="card">
       <label id="dropzone" for="file-input">
         <input id="file-input" type="file" multiple
@@ -90,7 +95,13 @@
     </section>
 
     <section id="result-panel" hidden>
-      <div class="toolbar">
+      <div id="page-strip" hidden></div>
+      <div class="toolbar" id="toolbar">
+        <div class="page-nav" id="page-nav" hidden>
+          <button id="prev-page" class="button secondary" type="button" title="Previous page (←)">‹</button>
+          <span id="page-pos"></span>
+          <button id="next-page" class="button secondary" type="button" title="Next page (→)">›</button>
+        </div>
         <div class="seg">
           <button data-view="side" class="active">Side by side</button>
           <button data-view="translated">Translated</button>
@@ -100,11 +111,11 @@
         <span id="cost-info" class="note" title="Estimated from the token counts Claude reported. Your Claude Console's Usage page has the exact bill."></span>
         <div class="downloads">
           <button id="read-btn" class="button secondary" type="button" title="Fullscreen reader (← → keys, O = original)">⛶ Read</button>
-          <a id="download" class="button secondary" download>Download page</a>
-          <a id="download-all" class="button" hidden>Download all (ZIP)</a>
+          <a id="download" class="button secondary" download title="Download this page">⤓ Page</a>
+          <a id="download-all" class="button" hidden title="Download all pages as a ZIP">⤓ All (ZIP)</a>
         </div>
       </div>
-      <div id="page-strip" hidden></div>
+      <div class="workspace">
       <div id="viewer" class="side">
         <figure class="orig"><img id="img-original" alt="Original page"><figcaption>Original</figcaption></figure>
         <figure class="trans"><img id="img-translated" alt="Translated page"><figcaption>Translated</figcaption></figure>
@@ -118,7 +129,7 @@
         </figure>
       </div>
 
-      <div class="card">
+      <div class="card editor">
         <h2>Edit translations</h2>
         <p class="note">Fix any line, then re-render. Only the typesetting step re-runs.</p>
         <div id="bubbles"></div>
@@ -126,6 +137,7 @@
           <button id="rerender-btn">Re-render page</button>
           <label>Font <select id="edit-font"></select></label>
         </div>
+      </div>
       </div>
     </section>
   </main>

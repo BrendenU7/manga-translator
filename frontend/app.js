@@ -10,6 +10,7 @@ let job = null;          // the page currently shown
 let batch = null;        // current batch, if any
 let selectedId = null;   // job id of the selected page in a batch
 let shownId = null;      // job id whose result is currently rendered
+let scrolledFor = null;  // batch id whose first page we already scrolled into view
 
 // ------------------------------------------------------------------ setup
 
@@ -173,6 +174,7 @@ async function pollBatch() {
   $("#page-strip").hidden = !multi;
   // Show the results area once there's something to show (a finished page, or the strip)
   $("#result-panel").hidden = !multi && batch.done === 0;
+  setWorkspaceMode(batch.status !== "done" || batch.done > 0);
   $("#download-all").hidden = !multi || batch.done === 0;
   $("#download-all").href = batch.download_url;
 
@@ -193,6 +195,62 @@ async function pollBatch() {
   if (batch.status !== "done") return setTimeout(pollBatch, 1500);
   $("#translate-btn").disabled = false;
 }
+
+// Once a batch is under way, trade the big upload box for a one-line bar and widen the
+// page, so pages and editor fit on one screen. "+ New translation" brings the box back.
+function setWorkspaceMode(on) {
+  $("#upload-panel").hidden = on;
+  $("#compact-bar").hidden = !on;
+  document.querySelector("main").classList.toggle("wide", on);
+  if (on && batch) {
+    const progress = batch.status === "done"
+      ? `${batch.done} / ${batch.total} pages translated` + (batch.failed ? ` · ${batch.failed} failed` : "")
+      : `Translating… ${batch.done} / ${batch.total} pages`;
+    $("#compact-text").textContent = `${batch.name} · ${progress}`;
+    $("#progress-panel").hidden = batch.status === "done" && !batch.failed && $("#error").hidden;
+  }
+  renderPageNav();
+}
+
+// ‹ 3 / 26 › between finished pages
+function donePageIds() {
+  return batch ? batch.pages.filter((p) => p.status === "done").map((p) => p.id) : [];
+}
+
+function renderPageNav() {
+  const ids = batch ? batch.pages.map((p) => p.id) : [];
+  $("#page-nav").hidden = ids.length < 2;
+  const i = ids.indexOf(shownId);
+  $("#page-pos").textContent = i >= 0 ? `${i + 1} / ${ids.length}` : `– / ${ids.length}`;
+}
+
+function scrollToWorkspace() {
+  const top = $("#toolbar").getBoundingClientRect().top + window.scrollY;
+  window.scrollTo({ top });
+}
+
+function stepPage(step) {
+  const ids = donePageIds();
+  if (!ids.length) return;
+  const i = ids.indexOf(shownId);
+  const next = ids[Math.min(ids.length - 1, Math.max(0, (i < 0 ? 0 : i) + step))];
+  if (next && next !== shownId) {
+    selectPage(next);
+    // Slide the thumbnail strip sideways to the current page (without scrolling the window)
+    const thumb = document.querySelector(`.thumb[data-id="${next}"]`);
+    const strip = $("#page-strip");
+    if (thumb) strip.scrollTo({ left: thumb.offsetLeft - strip.clientWidth / 2 + thumb.clientWidth / 2 });
+  }
+}
+
+$("#prev-page").addEventListener("click", () => stepPage(-1));
+$("#next-page").addEventListener("click", () => stepPage(1));
+document.addEventListener("keydown", (e) => {
+  // Arrow keys flip pages, unless you're typing or the fullscreen reader is open
+  if (!$("#reader").hidden || ["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement?.tagName)) return;
+  if (e.key === "ArrowRight") stepPage(1);
+  else if (e.key === "ArrowLeft") stepPage(-1);
+});
 
 function renderCost() {
   if (!batch) return;
@@ -248,9 +306,9 @@ async function selectPage(id) {
 function bust(url) { return `${url}?t=${Date.now()}`; }
 
 function showResult(page) {
-  const firstShow = $("#result-panel").hidden;
   shownId = page.id;
   renderCost();
+  renderPageNav();
   $("#result-panel").hidden = false;
   $("#img-original").src = page.original_url;
   $("#img-translated").src = bust(page.translated_url);
@@ -278,7 +336,12 @@ function showResult(page) {
     ta.dataset.id = r.id;
     list.appendChild(row);
   });
-  if (firstShow) $("#result-panel").scrollIntoView({ behavior: "smooth" });
+  // The first page shown for a batch: scroll so the toolbar sits at the top, then
+  // toolbar + whole page + editor fill the screen
+  if (batch && scrolledFor !== batch.id) {
+    scrolledFor = batch.id;
+    requestAnimationFrame(scrollToWorkspace);
+  }
 }
 
 $("#rerender-btn").addEventListener("click", async () => {
