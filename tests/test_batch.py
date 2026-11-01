@@ -229,3 +229,31 @@ def test_cannot_retry_someone_elses_page(client):
     other = TestClient(main.app)
     other.post("/api/auth/signup", json={"username": "other", "password": "password123"})
     assert other.post(f"/api/jobs/{batch['pages'][0]['id']}/retry").status_code == 404
+
+
+def test_stop_skips_pages_not_started_and_retry_resumes(client, monkeypatch):
+    import threading
+    gate = threading.Event()
+
+    def slow(img, source_lang, target_lang, progress, **kw):
+        gate.wait(5)  # pages stay "running" until we open the gate
+        return [], img, np.zeros_like(img)
+
+    monkeypatch.setattr(jobs, "run_pipeline", slow)
+    files = [("files", (f"p{i}.png", png_bytes(), "image/png")) for i in range(6)]
+    batch = client.post("/api/batches", files=files).json()
+    try:
+        wait_for(client, f"/api/batches/{batch['id']}",
+                 done=lambda b: any(p["status"] == "running" for p in b["pages"]))
+        stopped = client.post(f"/api/batches/{batch['id']}/stop").json()["stopped"]
+        assert stopped >= 1
+    finally:
+        gate.set()  # never leave workers blocked for the other tests
+    batch = wait_for(client, f"/api/batches/{batch['id']}")
+    assert batch["failed"] == stopped and batch["done"] == 6 - stopped
+    page = next(p for p in batch["pages"] if p["status"] == "error")
+    assert "Stopped" in client.get(f"/api/jobs/{page['id']}").json()["error"]
+
+    client.post(f"/api/jobs/{page['id']}/retry")   # resume one
+    batch = wait_for(client, f"/api/batches/{batch['id']}")
+    assert batch["done"] == 6 - stopped + 1

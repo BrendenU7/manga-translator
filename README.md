@@ -101,6 +101,11 @@ Open Font License (see `fonts/licenses/`); text a font can't draw falls back to 
 font. Pick a style before translating, or change it per page in the editor. To use your
 own font, put it at `fonts/comic.ttf` (replaces Manga) or set `FONT_PATH`.
 
+**Progress page:** a centered column with overall progress, a summary (pages, failures,
+estimated cost), a chip per page showing its stage live (✓ done, ! failed, click to open),
+"Stop translation", and a retention/download card. **Stop** skips pages not started yet;
+**Retry failed** resumes them.
+
 **Viewer:** side by side, translated, original, or a drag **slider** to compare the two;
 **⛶ Read** opens a fullscreen reader (← → to flip, hold O to peek at the original, Esc to close).
 
@@ -126,6 +131,7 @@ pytest                 # includes an end-to-end run on the sample page
 | `POST` | `/api/batches` | multipart: `files` (repeat), same options → batch of page jobs |
 | `GET` | `/api/batches/{id}` | Progress (`done` / `total`) and each page's status |
 | `GET` | `/api/batches` | Dashboard: your batches, newest first, with expiry times |
+| `POST` | `/api/batches/{id}/stop` | Skip pages not started yet (they can be retried) |
 | `DELETE` | `/api/batches/{id}` | Delete a batch and its pages |
 | `GET` | `/api/batches/{id}/download` | ZIP of all translated pages |
 | `GET` | `/api/jobs/{id}` | Status, current stage, regions (source and translated text, boxes) |

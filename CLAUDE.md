@@ -13,6 +13,10 @@ Portfolio project; keep code readable and well commented over clever.
 - `backend/app/auth.py`: users + sessions in SQLite (`data/app.db`); `Depends(current_user)` on routes.
   Every Batch/Job has `owner` and `created_at`; check ownership (404 if not yours).
   `jobs.cleanup_expired()` deletes anything older than RETENTION_DAYS (background thread).
+- Results page (index.html with a batch): single centered column: job title, progress card,
+  summary, per-page chips (stage dots), retention/download card, viewer (Original/Translated/
+  Compare/Side by side, ‹ n/N ›), contained thumbnail strip, editor below. Grid/flex children
+  need `min-width: 0` so wide content (strips) never widens the page.
 - `frontend/common.js`: shared header (theme toggle, login redirect, logout); pages:
   `index.html` (translate, `?batch=<id>` reopens), `dashboard.html`, `login.html`
 - `extension/`: MV3 browser extension (background.js uploads batches with `Bearer mtk_…`,

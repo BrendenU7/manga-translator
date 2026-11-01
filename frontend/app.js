@@ -15,8 +15,11 @@ let shownStatus = null;  // status of the selected page when we last rendered it
 
 // ------------------------------------------------------------------ setup
 
+let appCfg = null;  // /api/config, kept for language names etc.
+
 async function loadConfig() {
   const cfg = await (await fetch("/api/config")).json();
+  appCfg = cfg;
   const fill = (el, langs, def) => {
     el.innerHTML = Object.entries(langs)
       .map(([code, name]) => `<option value="${code}" ${code === def ? "selected" : ""}>${name}</option>`)
@@ -139,6 +142,7 @@ $("#translate-btn").addEventListener("click", async () => {
 function resetBatchView() {
   batch = null; job = null; selectedId = null; shownId = null;
   $("#page-strip").innerHTML = "";
+  $("#page-chips").innerHTML = "";
 }
 
 function renderStages(stage) {
@@ -169,26 +173,18 @@ function ensurePolling() {
 async function pollBatch() {
   pollTimer = null;
   batch = await (await fetch(`/api/batches/${batch.id}`)).json();
-  const finished = batch.done + batch.failed;
-  $("#bar-fill").style.width = `${(100 * finished) / batch.total}%`;
-  $("#batch-count").textContent =
-    `${batch.done} / ${batch.total} pages translated` + (batch.failed ? ` · ${batch.failed} failed` : "");
-
-  const running = batch.pages.find((p) => p.status === "running" && p.stage !== "waiting")
-    || batch.pages.find((p) => p.status === "running");
-  renderStages(running ? running.stage : batch.status === "done" ? "done" : "queued");
-
   const multi = batch.total > 1;
+
+  renderHead();
+  renderProgress();
+  renderSummary();
+  renderChips();
+  renderDownloadCard();
   renderCost();
-  $("#batch-progress").hidden = !multi;
   renderStrip();
   $("#page-strip").hidden = !multi;
-  // Show the results area once there's something to show (a finished page, or the strip)
-  // (a finished single page that failed also opens, so its Retry buttons are reachable)
+  // Results open once there's a page to show (or a failed single page, for its Retry buttons)
   $("#result-panel").hidden = !multi && batch.done === 0 && batch.status !== "done";
-  setWorkspaceMode(batch.status !== "done" || batch.done > 0);
-  $("#download-all").hidden = !multi || batch.done === 0;
-  $("#download-all").href = batch.download_url;
 
   // Show the first finished page automatically, and refresh the selected one when it finishes
   if (!selectedId) {
@@ -196,32 +192,136 @@ async function pollBatch() {
       || (batch.status === "done" && batch.pages.find((p) => p.status === "error"));
     if (first) selectPage(first.id);
   } else if (selectedId !== shownId) {
-    // Refresh the selected page when it finishes (or fails)
     const sel = batch.pages.find((p) => p.id === selectedId);
     if (sel && (sel.status === "done" || sel.status === "error") && sel.status !== shownStatus) selectPage(selectedId);
   }
-  $("#retry-failed").hidden = !batch.failed;
-  $("#retry-failed").textContent = `↻ Retry failed (${batch.failed})`;
 
   if (batch.status !== "done") { pollTimer = setTimeout(pollBatch, 1500); return; }
   $("#translate-btn").disabled = false;
 }
 
-// Once a batch is under way, trade the big upload box for a one-line bar and widen the
-// page, so pages and editor fit on one screen. "+ New translation" brings the box back.
-function setWorkspaceMode(on) {
-  $("#upload-panel").hidden = on;
-  $("#compact-bar").hidden = !on;
-  document.querySelector("main").classList.toggle("wide", on);
-  if (on && batch) {
-    const progress = batch.status === "done"
-      ? `${batch.done} / ${batch.total} pages translated` + (batch.failed ? ` · ${batch.failed} failed` : "")
-      : `Translating… ${batch.done} / ${batch.total} pages`;
-    $("#compact-text").textContent = `${batch.name} · ${progress}`;
-    $("#progress-panel").hidden = batch.status === "done" && !batch.failed && $("#error").hidden;
-  }
-  renderPageNav();
+// ------------------------------------------------------------------ progress page parts
+
+const STAGE_LABEL = { queued: "Pending", enhancing: "Cleaning scan", detecting: "Detecting text",
+  reading: "Reading", waiting: "In line", translating: "Translating", cleaning: "Erasing",
+  typesetting: "Lettering" };
+// How many of the 5 steps a page has finished, by its current stage
+const STAGE_STEP = { queued: 0, enhancing: 0, detecting: 0, reading: 1, waiting: 2, translating: 2,
+  cleaning: 3, typesetting: 4, done: 5 };
+
+function langName(code) {
+  if (code === "auto") return "Auto-detect";
+  const all = { ...(appCfg?.source_langs || {}), ...(appCfg?.target_langs || {}) };
+  return (all[code] || code).split(" (")[0];
 }
+
+// Title line: swap the upload box for "Translation Progress · Auto-detect → English · 29 pages"
+function renderHead() {
+  $("#upload-panel").hidden = true;
+  $("#job-head").hidden = false;
+  document.querySelector("main").classList.add("results");
+  const quality = batch.quality === "best" ? "Best quality" : "Economy";
+  $("#job-sub").textContent = `${batch.name} · ${langName(batch.source_lang)} → ${langName(batch.target_lang)}`
+    + ` · ${batch.total} page${batch.total === 1 ? "" : "s"} · ${quality}`;
+  $("#stop-btn").hidden = batch.status === "done";
+}
+
+function renderProgress() {
+  const finished = batch.done + batch.failed;
+  const done = batch.status === "done";
+  $("#progress-panel").hidden = false;
+  $("#progress-panel").classList.toggle("done", done);
+  $("#pc-icon").textContent = done ? "✓" : "文";
+  $("#pc-title").textContent = done ? "Overall Progress" : "Processing";
+  $("#pc-count").textContent = `${finished}/${batch.total}`;
+  $("#bar-fill").style.width = `${(100 * finished) / batch.total}%`;
+  // "2 Translating · 3 Erasing · 6 Pending"
+  const counts = {};
+  for (const p of batch.pages) {
+    if (p.status === "queued" || p.status === "running") {
+      const label = STAGE_LABEL[p.status === "queued" ? "queued" : p.stage] || "Working";
+      counts[label] = (counts[label] || 0) + 1;
+    }
+  }
+  const order = Object.values(STAGE_LABEL);
+  $("#pc-detail").textContent = done ? "" : Object.entries(counts)
+    .sort((a, b) => order.indexOf(b[0]) - order.indexOf(a[0])).map(([l, n]) => `${n} ${l}`).join(" · ");
+  $("#pc-detail").hidden = done;
+  // Single pages show the 5 steps; chapters show per-page chips instead
+  const single = batch.total === 1;
+  $("#stages").hidden = !single || done;
+  if (single) {
+    const p = batch.pages[0];
+    renderStages(p.status === "done" ? "done" : p.status === "queued" ? "queued" : p.stage);
+  }
+}
+
+function renderSummary() {
+  const show = batch.done + batch.failed > 0;
+  $("#summary-card").hidden = !show;
+  if (!show) return;
+  const parts = [`${batch.total} page${batch.total === 1 ? "" : "s"}`, `${batch.done} translated`];
+  if (batch.failed) parts.push(`${batch.failed} failed`);
+  parts.push(`est. cost ${fmtUsd(batch.cost_usd)}`);
+  $("#summary-text").textContent = `🗒 ${parts.join(" · ")}`;
+  $("#retry-failed").hidden = !batch.failed;
+  $("#retry-failed").textContent = `↻ Retry failed (${batch.failed})`;
+}
+
+function renderChips() {
+  const box = $("#page-chips");
+  box.hidden = batch.total < 2;
+  if (box.hidden) return;
+  batch.pages.forEach((p, i) => {
+    let chip = box.querySelector(`[data-id="${p.id}"]`);
+    if (!chip) {
+      chip = document.createElement("button");
+      chip.type = "button";
+      chip.dataset.id = p.id;
+      chip.addEventListener("click", () => {
+        const page = batch.pages.find((x) => x.id === p.id);
+        if (page && (page.status === "done" || page.status === "error")) {
+          selectPage(p.id);
+          scrollToWorkspace();
+        }
+      });
+      box.appendChild(chip);
+    }
+    const n = i + 1;
+    if (p.status === "done") {
+      chip.className = "chip done";
+      chip.innerHTML = `✓ ${n}`;
+      chip.title = `Page ${n}: done (${fmtUsd(p.cost_usd)}). Click to open.`;
+    } else if (p.status === "error") {
+      chip.className = "chip error";
+      chip.innerHTML = `! ${n}`;
+      chip.title = `Page ${n}: failed. Click to see why and retry.`;
+    } else {
+      const step = STAGE_STEP[p.status === "queued" ? "queued" : p.stage] ?? 0;
+      const dots = [0, 1, 2, 3, 4].map((k) => `<i class="${k < step ? "on" : k === step && p.status === "running" ? "now" : ""}"></i>`).join("");
+      const label = p.status === "running" ? `<span class="lbl">${STAGE_LABEL[p.stage] || "Working"}</span>` : "";
+      chip.className = `chip ${p.status}`;
+      chip.innerHTML = `${n} <span class="dots">${dots}</span>${label}`;
+      chip.title = `Page ${n}: ${STAGE_LABEL[p.status === "queued" ? "queued" : p.stage] || p.status}`;
+    }
+    chip.classList.toggle("selected", p.id === selectedId);
+  });
+}
+
+function renderDownloadCard() {
+  $("#download-card").hidden = batch.done === 0;
+  $("#download-all").href = batch.download_url;
+  $("#keep-days").textContent = appCfg?.retention_days ?? 10;
+  $("#keep-until").textContent = new Date(batch.expires_at * 1000)
+    .toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+}
+
+$("#stop-btn").addEventListener("click", async () => {
+  $("#stop-btn").disabled = true;
+  await fetch(`/api/batches/${batch.id}/stop`, { method: "POST" });
+  $("#stop-btn").disabled = false;
+  ensurePolling();
+});
 
 // ‹ 3 / 26 › between finished pages
 // Pages the arrows step through: finished and failed ones (failed pages show Retry)
@@ -231,9 +331,17 @@ function donePageIds() {
 
 function renderPageNav() {
   const ids = batch ? batch.pages.map((p) => p.id) : [];
-  $("#page-nav").hidden = ids.length < 2;
+  $("#page-nav").hidden = ids.length < 2 && !(job && job.status === "done" && !job.regions.length);
   const i = ids.indexOf(selectedId || shownId);
   $("#page-pos").textContent = i >= 0 ? `${i + 1} / ${ids.length}` : `– / ${ids.length}`;
+  // Short note about the page on screen, e.g. "No text found on this page"
+  let note = "";
+  if (job && job.id === selectedId) {
+    if (job.status === "error") note = "Failed";
+    else if (job.status === "done" && !job.regions.length) note = "No text found on this page";
+  }
+  $("#page-note").hidden = !note;
+  $("#page-note").textContent = note;
 }
 
 function scrollToWorkspace() {
@@ -298,7 +406,7 @@ function renderStrip() {
 
 async function selectPage(id) {
   selectedId = id;
-  document.querySelectorAll(".thumb").forEach((t) => t.classList.toggle("selected", t.dataset.id === id));
+  document.querySelectorAll(".thumb, .chip").forEach((t) => t.classList.toggle("selected", t.dataset.id === id));
   const page = await (await fetch(`/api/jobs/${id}`)).json();
   shownStatus = page.status;
   $("#page-msg").hidden = true;
@@ -401,10 +509,7 @@ function showResult(page) {
   });
   // The first page shown for a batch: scroll so the toolbar sits at the top, then
   // toolbar + whole page + editor fill the screen
-  if (batch && scrolledFor !== batch.id) {
-    scrolledFor = batch.id;
-    requestAnimationFrame(scrollToWorkspace);
-  }
+  // (no auto-scroll: the progress cards above stay in view, the page is just below)
 }
 
 $("#rerender-btn").addEventListener("click", async () => {

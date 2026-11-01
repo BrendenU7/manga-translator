@@ -30,9 +30,15 @@
   </header>
 
   <main>
-    <section id="compact-bar" class="card compact-bar" hidden>
-      <span id="compact-text"></span>
-      <a class="button" href="/index.html">+ New translation</a>
+    <section id="job-head" class="job-head" hidden>
+      <div>
+        <h1>Translation Progress</h1>
+        <p id="job-sub" class="note"></p>
+      </div>
+      <div class="head-actions">
+        <button id="stop-btn" class="button secondary" type="button" hidden>◼ Stop translation</button>
+        <a class="button secondary" href="/index.html">+ New translation</a>
+      </div>
     </section>
 
     <section id="upload-panel" class="card">
@@ -79,12 +85,17 @@
       <p id="mode-note" class="note" hidden></p>
     </section>
 
-    <section id="progress-panel" class="card" hidden>
-      <div id="batch-progress" hidden>
-        <div class="bar"><div id="bar-fill"></div></div>
-        <p id="batch-count" class="note"></p>
+    <!-- Overall progress -->
+    <section id="progress-panel" class="card progress-card" hidden>
+      <div class="pc-row">
+        <span id="pc-icon" class="pc-icon">文</span>
+        <div class="pc-main">
+          <div class="pc-top"><b id="pc-title">Processing</b><span id="pc-count"></span></div>
+          <div class="bar"><div id="bar-fill"></div></div>
+          <p id="pc-detail" class="note"></p>
+        </div>
       </div>
-      <ol id="stages">
+      <ol id="stages" hidden>
         <li data-stage="detecting">Detect bubbles</li>
         <li data-stage="reading">Read text</li>
         <li data-stage="translating">Translate</li>
@@ -94,30 +105,44 @@
       <p id="error" class="error" hidden></p>
     </section>
 
+    <!-- One-line summary, e.g. "29 pages · 27 translated · 2 failed · est. $0.02" -->
+    <section id="summary-card" class="card slim-card" hidden>
+      <span id="summary-text"></span>
+      <button id="retry-failed" class="button retry" type="button" hidden>↻ Retry failed</button>
+    </section>
+
+    <!-- One chip per page: progress dots while working, green when done, red if failed -->
+    <div id="page-chips" hidden></div>
+
+    <!-- Retention + download all -->
+    <section id="download-card" class="card slim-card" hidden>
+      <span>⏱ Files are kept for <b id="keep-days">10</b> days. Please download your files before
+        <b id="keep-until"></b>.</span>
+      <a id="download-all" class="button" title="Download all translated pages as a ZIP">⤓ Download ZIP</a>
+    </section>
+
     <section id="result-panel" hidden>
-      <div id="page-strip" hidden></div>
       <div class="toolbar" id="toolbar">
-        <div class="page-nav" id="page-nav" hidden>
-          <button id="prev-page" class="button secondary" type="button" title="Previous page (←)">‹</button>
-          <span id="page-pos"></span>
-          <button id="next-page" class="button secondary" type="button" title="Next page (→)">›</button>
-        </div>
         <div class="seg">
-          <button data-view="side" class="active">Side by side</button>
-          <button data-view="translated">Translated</button>
-          <button data-view="original">Original</button>
-          <button data-view="slider">Slider</button>
+          <button data-view="original">👁 Original</button>
+          <button data-view="translated" class="active">Translated</button>
+          <button data-view="slider">⇆ Compare</button>
+          <button data-view="side">Side by side</button>
         </div>
-        <span id="cost-info" class="note" title="Estimated from the token counts Claude reported. Your Claude Console's Usage page has the exact bill."></span>
-        <div class="downloads">
-          <button id="retry-failed" class="button retry" type="button" hidden>↻ Retry failed</button>
-          <button id="read-btn" class="button secondary" type="button" title="Fullscreen reader (← → keys, O = original)">⛶ Read</button>
-          <a id="download" class="button secondary" download title="Download this page">⤓ Page</a>
-          <a id="download-all" class="button" hidden title="Download all pages as a ZIP">⤓ All (ZIP)</a>
+        <div class="toolbar-right">
+          <div class="page-nav" id="page-nav" hidden>
+            <button id="prev-page" class="button secondary" type="button" title="Previous page (←)">‹</button>
+            <span id="page-pos"></span>
+            <span id="page-note" class="page-note" hidden></span>
+            <button id="next-page" class="button secondary" type="button" title="Next page (→)">›</button>
+          </div>
+          <a id="download" class="button secondary icon-btn" download title="Download this page">⤓</a>
+          <button id="read-btn" class="button secondary icon-btn" type="button" title="Fullscreen reader (← → keys, O = original)">⛶</button>
         </div>
       </div>
-      <div class="workspace">
-      <div id="viewer" class="side">
+      <div id="page-strip" hidden></div>
+
+      <div id="viewer" class="translated">
         <figure class="orig"><img id="img-original" alt="Original page"><figcaption>Original</figcaption></figure>
         <figure class="trans"><img id="img-translated" alt="Translated page"><span class="placeholder">No translation yet</span><figcaption>Translated</figcaption></figure>
         <figure class="compare-wrap">
@@ -131,8 +156,11 @@
       </div>
 
       <div class="card editor">
-        <h2>Edit translations</h2>
-        <p class="note">Fix any line, then re-render. Only the typesetting step re-runs.</p>
+        <div class="editor-head">
+          <h2>Edit this page's text</h2>
+          <span id="cost-info" class="note" title="Estimated from the token counts Claude reported. Your Claude Console's Usage page has the exact bill."></span>
+        </div>
+        <p class="note">Fix any line, then re-render. Only the lettering step re-runs.</p>
         <p id="page-msg" class="page-msg" hidden></p>
         <div id="retry-box" class="retry-box" hidden>
           <p id="retry-reason"></p>
@@ -151,7 +179,6 @@
           <select id="again-quality"></select>
           <button id="again-btn" class="button secondary" type="button">↻ Translate again</button>
         </div>
-      </div>
       </div>
     </section>
   </main>

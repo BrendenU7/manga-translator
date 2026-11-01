@@ -298,3 +298,86 @@ main.wide { padding-top: 8px; }
 #img-translated:not([src]) { display: none; }
 .trans .placeholder { display: none; color: var(--muted); padding: 40px 0; }
 #img-translated:not([src]) + .placeholder { display: block; }
+
+/* ==================================================================== results page (v2)
+   One centered column, modeled on a classic "translation progress" page:
+   title · overall progress · summary · page chips · download card · viewer · editor.
+   These rules come last and override the earlier two-column workspace. */
+main > *, #result-panel, #viewer, .toolbar { min-width: 0; }  /* wide content must never widen the page */
+main.results { max-width: 1000px; }
+
+.job-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.job-head h1 { margin: 0; font-size: 26px; letter-spacing: -.01em; }
+.job-head .note { margin: 2px 0 0; }
+.head-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.head-actions .button { padding: 6px 12px; font-size: 14px; }
+
+.progress-card { padding: 14px 16px; }
+.pc-row { display: flex; gap: 14px; align-items: center; }
+.pc-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto;
+  background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.pc-main { flex: 1; min-width: 0; }
+.pc-top { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; }
+#pc-count { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+#pc-detail { margin: 6px 0 0; font-size: 12px; }
+.progress-card.done { border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 6%, var(--card)); }
+.progress-card.done .pc-icon { background: var(--ok-soft); color: var(--ok); }
+.progress-card.done #pc-count { color: var(--muted); }
+.progress-card.done #bar-fill { background: var(--ok); }
+.progress-card #stages { margin-top: 12px; }
+
+.slim-card { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; font-size: 14px; }
+.slim-card .button { padding: 6px 14px; font-size: 14px; flex-shrink: 0; }
+
+/* Page chips */
+#page-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  font: 600 12px/1.2 system-ui, sans-serif; cursor: default; }
+.chip .dots { display: inline-flex; gap: 2px; }
+.chip .dots i { width: 9px; height: 5px; border-radius: 3px; border: 1px solid currentColor; opacity: .5; }
+.chip .dots i.on { background: var(--ok); border-color: var(--ok); opacity: 1; }
+.chip .dots i.now { background: var(--accent); border-color: var(--accent); opacity: 1; animation: pulse 1.2s infinite; }
+.chip .lbl { font-weight: 500; }
+.chip.running { color: var(--ink); border-color: var(--accent); }
+.chip.done { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+  background: color-mix(in srgb, var(--ok) 8%, var(--surface)); cursor: pointer; }
+.chip.error { color: #e03131; border-color: #e0313180; background: color-mix(in srgb, #e03131 8%, var(--surface));
+  cursor: pointer; }
+.chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Viewer toolbar: views left, page nav + actions right; plain (not sticky) */
+.toolbar { position: static; justify-content: space-between; flex-wrap: wrap; padding: 4px 0; background: none; }
+.toolbar-right { display: flex; align-items: center; gap: 8px; }
+.toolbar .button.icon-btn { padding: 5px 10px; font-size: 16px; line-height: 1; }
+.page-note { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line);
+  color: var(--muted); white-space: nowrap; }
+
+/* Thumbnails: always scroll inside their own box */
+#page-strip { display: flex; overflow-x: auto; max-width: 100%; gap: 6px; padding: 6px 0 8px;
+  scrollbar-width: thin; }
+#page-strip .thumb { width: 40px; flex: 0 0 auto; border-width: 2px; }
+#page-strip .thumb img { height: 54px; }
+#page-strip .thumb .state { display: none; }
+#page-strip .thumb .num { font-size: 9px; padding: 0 4px; }
+
+/* One page at a time, as big as the window allows */
+#viewer { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 4px; }
+#viewer.side { grid-template-columns: 1fr 1fr; }
+#viewer figure img { max-height: calc(100vh - 110px); }
+#viewer.translated figure.trans, #viewer.original figure.orig { background: var(--card); }
+
+/* Editor below the page */
+.editor { position: static; max-height: none; overflow: visible; margin-top: 14px; }
+.editor-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.editor-head #cost-info { margin: 0; font-size: 12px; }
+@media (min-width: 1100px) { .bubble { grid-template-columns: 32px 1fr 1.4fr; } .bubble textarea { grid-column: auto; } }
+
+@media (max-width: 700px) {
+  .job-head { flex-direction: column; align-items: flex-start; }
+  .slim-card { flex-direction: column; align-items: flex-start; }
+}
+/* Leave room for the toolbar + thumbnail strip above the page */
+#viewer figure img { max-height: calc(100vh - 160px); }

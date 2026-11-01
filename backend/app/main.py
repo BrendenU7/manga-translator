@@ -321,6 +321,12 @@ def get_batch(batch_id: str, user: User = Depends(current_user)):
     return _batch_json(_batch_or_404(batch_id, user))
 
 
+@app.post("/api/batches/{batch_id}/stop")
+def stop_batch(batch_id: str, user: User = Depends(current_user)):
+    """Stop translating: pages not started yet are skipped (Retry failed resumes them)."""
+    return {"stopped": jobs.stop_batch(_batch_or_404(batch_id, user))}
+
+
 @app.delete("/api/batches/{batch_id}")
 def delete_batch(batch_id: str, user: User = Depends(current_user)):
     jobs.delete_batch(_batch_or_404(batch_id, user))

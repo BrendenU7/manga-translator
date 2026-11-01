@@ -38,6 +38,8 @@ _executor = ThreadPoolExecutor(max_workers=config.WORKERS, thread_name_prefix="p
 _jobs: dict[str, "Job"] = {}
 _batches: dict[str, "Batch"] = {}
 _deleted: set[str] = set()   # job ids deleted while queued/running: skip or discard their work
+_stopped: set[str] = set()   # queued job ids the user stopped: skip them when their turn comes
+STOPPED_MESSAGE = "Stopped before it was translated. Use Retry to translate it."
 _lock = threading.RLock()
 
 ID_RE = re.compile(r"^[0-9a-f]{12}$")
@@ -203,8 +205,8 @@ def _run(job: Job, context: PageContext | None = None, earlier_usage: dict | Non
         job.save()
 
     try:
-        if job.id in _deleted:
-            return
+        if job.id in _deleted or job.id in _stopped:
+            return  # (the finally below still unblocks the next page)
         job.status = "running"
         img = _load_rgb(job.dir / "original.png")
         if job.enhance:
@@ -256,6 +258,7 @@ def retry_job(job: Job, quality: str | None = None) -> Job:
                         for r in prev.regions]
     if quality:
         job.quality = quality
+    _stopped.discard(job.id)
     earlier_usage = dict(job.usage or {})
     job.status, job.stage, job.error = "queued", "queued", ""
     job.regions = []
@@ -396,6 +399,23 @@ def list_batches(owner: int) -> list[Batch]:
         if batch and batch.owner == owner:
             batches.append(batch)
     return sorted(batches, key=lambda b: b.created_at, reverse=True)
+
+
+def stop_batch(batch: Batch) -> int:
+    """Stop a batch: pages not started yet are skipped (pages already running finish).
+
+    Stopped pages count as failed with a clear message, so "Retry failed" resumes them.
+    Returns how many pages were stopped.
+    """
+    stopped = 0
+    for job in batch.pages():
+        if job.status == "queued":
+            with _lock:
+                _stopped.add(job.id)
+            job.status, job.stage, job.error = "error", "error", STOPPED_MESSAGE
+            job.save()
+            stopped += 1
+    return stopped
 
 
 def delete_batch(batch: Batch):
