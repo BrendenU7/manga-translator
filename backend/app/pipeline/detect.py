@@ -17,6 +17,9 @@ from .models import Box, TextRegion, union
 log = logging.getLogger(__name__)
 _readers: dict[str, object] = {}
 _lock = threading.Lock()
+# EasyOCR / manga-ocr models aren't documented as thread-safe, and several pages run at
+# once, so calls into them take this lock. (The ONNX text detector is thread-safe.)
+MODEL_LOCK = threading.Lock()
 
 # EasyOCR language codes for each source language
 EASYOCR_LANGS = {"auto": ["ja", "en"], "ja": ["ja", "en"], "zh-Hans": ["ch_sim", "en"],
@@ -41,8 +44,9 @@ def get_reader(source_lang: str):
 
 def detect_lines(img: np.ndarray, source_lang: str) -> list[Box]:
     reader = get_reader(source_lang)
-    horizontal, free = reader.detect(img, min_size=8, text_threshold=0.6, low_text=0.35,
-                                     width_ths=0.3, height_ths=0.5, ycenter_ths=0.5)
+    with MODEL_LOCK:
+        horizontal, free = reader.detect(img, min_size=8, text_threshold=0.6, low_text=0.35,
+                                         width_ths=0.3, height_ths=0.5, ycenter_ths=0.5)
     boxes: list[Box] = []
     for x1, x2, y1, y2 in horizontal[0]:
         boxes.append((int(x1), int(y1), int(x2), int(y2)))

@@ -35,6 +35,11 @@ Russian, Thai, Arabic and Persian. `pipeline/fonts.py` picks a font that has eve
 character needed (bundled Comic Neue for Latin, then system fonts on Windows/macOS/Linux);
 Chinese/Japanese wrap per character, Arabic/Persian are shaped right-to-left.
 
+**Chapters:** pages run on a pool of `WORKERS` threads (default 2), so detection, OCR and
+erasing overlap. Translation is chained in page order: each page waits for the previous
+one and gets the last two pages' dialogue as context, so names, terms and each
+character's voice stay consistent across a chapter.
+
 **Accounts + dashboard:** sign up / log in (scrypt-hashed passwords, httponly session
 cookies, SQLite in `data/app.db`). Every upload belongs to its user; other users get 404s.
 The Dashboard lists your recent translations (open, download ZIP, delete), and everything
@@ -100,7 +105,7 @@ pytest                 # includes an end-to-end run on the sample page
 - [x] 27 target languages + auto-detect source
 - [x] Dark mode
 - [x] Accounts, dashboard, 10-day auto-delete
-- [ ] Context across pages + parallel processing
+- [x] Context across pages + parallel processing
 - [ ] Before/after slider, reader, font picker
 - [ ] Webtoon long-strip support
 - [ ] Scan cleanup + LaMa inpainting

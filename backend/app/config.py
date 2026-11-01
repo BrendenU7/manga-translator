@@ -34,6 +34,10 @@ CTD_THREADS = int(os.getenv("CTD_THREADS", "0"))  # 0 = use all CPU cores
 # Send Claude an image of each bubble so it can read the text itself, not just the OCR guess
 CLAUDE_VISION = os.getenv("CLAUDE_VISION", "1") == "1"
 
+# Pages processed at the same time. Detection/OCR/erasing run in parallel; translation still
+# goes page by page so each page sees the previous page's dialogue. 2-3 suits most PCs.
+WORKERS = max(1, int(os.getenv("WORKERS", "2")))
+
 # Uploads and results are deleted automatically after this many days
 RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "10"))
 

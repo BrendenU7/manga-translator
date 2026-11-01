@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 
 from .. import config
-from .detect import get_reader
+from .detect import MODEL_LOCK, get_reader
 from .models import TextRegion
 
 log = logging.getLogger(__name__)
@@ -85,7 +85,8 @@ def _easyocr_lines(img: np.ndarray, region: TextRegion, source_lang: str) -> str
         crop = _crop(img, box)
         if region.vertical:
             crop = column_to_strip(crop)
-        res = reader.recognize(crop, detail=0, paragraph=False)
+        with MODEL_LOCK:
+            res = reader.recognize(crop, detail=0, paragraph=False)
         parts.append("".join(res) if region.vertical else " ".join(res))
     sep = "" if source_lang in config.VERTICAL_SOURCES or source_lang == "auto" else " "
     return sep.join(p.strip() for p in parts if p.strip())
@@ -99,7 +100,8 @@ def read_region(img: np.ndarray, region: TextRegion, source_lang: str) -> str:
     if source_lang == "ja":
         mocr = get_manga_ocr()
         if mocr is not None:
-            return mocr(Image.fromarray(_crop(img, region.box, pad=6))).strip()
+            with MODEL_LOCK:
+                return mocr(Image.fromarray(_crop(img, region.box, pad=6))).strip()
     return _easyocr_lines(img, region, source_lang)
 
 

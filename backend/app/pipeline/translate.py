@@ -43,9 +43,21 @@ Rules:
 - Keep stammers and trailing dots ("Th-this is...", "Beast...!").
 - Translate sound effects briefly ("BAM", "THUD").
 - If a region is not text (a mis-detection), return an empty string for it.
-{glossary}
+{glossary}{context_rule}
 Return ONLY a JSON object:
 {{"translations": [{{"id": <id>, "source": "<the original text as you read it>", "text": "<translation>"}}, ...]}}"""
+
+
+MAX_CONTEXT_LINES = 40  # most recent lines from earlier pages sent as context
+
+
+def _context_block(previous: list[dict]) -> str:
+    lines = [p for p in previous if p.get("text")][-MAX_CONTEXT_LINES:]
+    if not lines:
+        return ""
+    body = "\n".join(f"- {json.dumps(p.get('source', ''), ensure_ascii=False)} -> "
+                     f"{json.dumps(p['text'], ensure_ascii=False)}" for p in lines)
+    return f"Dialogue from the previous page(s) of this chapter, already translated (context only):\n{body}\n\n"
 
 
 def _extract_json(text: str) -> dict:
@@ -81,7 +93,8 @@ def _crop(page: np.ndarray, box, pad: int = 8) -> np.ndarray:
 
 
 def build_messages(regions: list[TextRegion], source_lang: str, target_lang: str,
-                   page: np.ndarray | None = None, style: str = "standard", glossary: str = ""):
+                   page: np.ndarray | None = None, style: str = "standard", glossary: str = "",
+                   previous: list[dict] | None = None):
     """Build (system, messages) for the Claude API."""
     source = config.LANG_NAMES_EN.get(source_lang, source_lang)
     target = config.LANG_NAMES_EN.get(target_lang, target_lang)
@@ -94,9 +107,13 @@ def build_messages(regions: list[TextRegion], source_lang: str, target_lang: str
         read_rule=("Read the text from each bubble image yourself; use the OCR only as a hint."
                    if vision else "Use context to infer the intended text."),
         glossary=(f"- Glossary (always use these names/terms):\n{glossary}\n" if glossary else ""),
+        context_rule=("- You'll also see the previous pages' dialogue. Stay consistent with it: same "
+                      "character names, terms, and each character's way of speaking. Don't re-translate it.\n"
+                      if previous else ""),
     )
+    context = _context_block(previous or [])
 
-    header = f"Source language: {source}. {len(regions)} bubbles, in reading order."
+    header = f"{context}Source language: {source}. {len(regions)} bubbles, in reading order."
     if not vision:
         bubbles = [{"id": r.id, "ocr": r.source_text} for r in regions]
         text = f"{header}\n{json.dumps(bubbles, ensure_ascii=False, indent=1)}"
@@ -112,11 +129,12 @@ def build_messages(regions: list[TextRegion], source_lang: str, target_lang: str
     return system, [{"role": "user", "content": content}]
 
 
-def translate_claude(regions, source_lang, target_lang, page=None, style="standard", glossary=""):
+def translate_claude(regions, source_lang, target_lang, page=None, style="standard", glossary="",
+                     previous=None):
     import anthropic
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    system, messages = build_messages(regions, source_lang, target_lang, page, style, glossary)
+    system, messages = build_messages(regions, source_lang, target_lang, page, style, glossary, previous)
     resp = client.messages.create(model=config.CLAUDE_MODEL, max_tokens=4000,
                                   system=system, messages=messages)
     text = "".join(block.text for block in resp.content if block.type == "text")
@@ -130,7 +148,8 @@ def parse_response(text: str) -> dict[int, dict]:
             for t in data.get("translations", [])}
 
 
-def translate_mock(regions, source_lang, target_lang, page=None, style="standard", glossary=""):
+def translate_mock(regions, source_lang, target_lang, page=None, style="standard", glossary="",
+                   previous=None):
     """Placeholder so the app runs without an API key."""
     return {r.id: {"source": "", "text": f"Mock translation for bubble {r.id + 1}."}
             for r in regions}
@@ -138,11 +157,12 @@ def translate_mock(regions, source_lang, target_lang, page=None, style="standard
 
 def translate_regions(regions: list[TextRegion], source_lang: str, target_lang: str,
                       page: np.ndarray | None = None, style: str = "standard",
-                      glossary: str = "") -> list[TextRegion]:
+                      glossary: str = "", previous: list[dict] | None = None) -> list[TextRegion]:
+    """previous: dialogue from earlier pages [{"source", "text"}], used as context."""
     if not regions:
         return regions
     fn = translate_claude if config.TRANSLATOR == "claude" else translate_mock
-    result = fn(regions, source_lang, target_lang, page, style, glossary)
+    result = fn(regions, source_lang, target_lang, page, style, glossary, previous)
     for r in regions:
         item = result.get(r.id, {})
         r.translated_text = item.get("text", "")

@@ -78,7 +78,7 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
 
-    def fake_pipeline(img, source_lang, target_lang, progress, style="standard", glossary=""):
+    def fake_pipeline(img, source_lang, target_lang, progress, style="standard", glossary="", context=None):
         progress("translating")
         return [], img, np.zeros_like(img)
 

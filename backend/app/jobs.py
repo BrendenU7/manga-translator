@@ -1,8 +1,9 @@
 """Background job runner and storage.
 
-Every upload is a Batch (one or more pages); every page is a Job. Jobs run on a single
-worker thread (the OCR models are CPU/GPU heavy, so running several at once just makes
-them all slower). State is kept in memory and mirrored to disk:
+Every upload is a Batch (one or more pages); every page is a Job. Pages run on a pool of
+WORKERS threads, so detection/OCR/erasing of several pages overlap. Translation is
+chained: page N translates after page N-1 and gets its dialogue as context (see _Chain).
+State is kept in memory and mirrored to disk:
 
     data/<job_id>/job.json, original.png, cleaned.png, translated.png
     data/batches/<batch_id>.json
@@ -28,10 +29,10 @@ import numpy as np
 from PIL import Image
 
 from . import config
-from .pipeline import TextRegion, rerender, run_pipeline
+from .pipeline import PageContext, TextRegion, rerender, run_pipeline
 
 log = logging.getLogger(__name__)
-_executor = ThreadPoolExecutor(max_workers=1)
+_executor = ThreadPoolExecutor(max_workers=config.WORKERS, thread_name_prefix="page")
 _jobs: dict[str, "Job"] = {}
 _batches: dict[str, "Batch"] = {}
 _deleted: set[str] = set()   # job ids deleted while queued/running: skip or discard their work
@@ -60,8 +61,10 @@ class Job:
     glossary: str = ""
     owner: int = 0
     created_at: float = 0.0
+    batch_id: str = ""
+    page_index: int = 0
     status: str = "queued"          # queued | running | done | error
-    stage: str = "queued"           # detecting | reading | translating | cleaning | typesetting
+    stage: str = "queued"           # detecting | reading | waiting | translating | cleaning | typesetting
     error: str = ""
     regions: list[dict] = field(default_factory=list)
 
@@ -76,17 +79,46 @@ class Job:
         (self.dir / "job.json").write_text(json.dumps(asdict(self), ensure_ascii=False, indent=1))
 
 
+class _Chain:
+    """Links the pages of one batch so translation happens in page order.
+
+    Page i's translation waits until page i-1 has published its dialogue, then gets the
+    dialogue of the last CONTEXT_PAGES pages as context. Pages are submitted to the pool
+    in order, so the page being waited on has always started already: no deadlock.
+    """
+    CONTEXT_PAGES = 2
+    TIMEOUT_S = 15 * 60  # never wait forever on a stuck page
+
+    def __init__(self, n: int):
+        self.done = [threading.Event() for _ in range(n)]
+        self.lines: list[list[dict]] = [[] for _ in range(n)]
+
+    def context_for(self, i: int) -> PageContext:
+        def wait_for_previous() -> list[dict]:
+            if i > 0:
+                self.done[i - 1].wait(timeout=self.TIMEOUT_S)
+            start = max(0, i - self.CONTEXT_PAGES)
+            return [line for page in self.lines[start:i] for line in page]
+
+        def publish(lines: list[dict]):
+            if not self.done[i].is_set():  # first call wins
+                self.lines[i] = lines
+                self.done[i].set()
+
+        return PageContext(wait_for_previous, publish)
+
+
 def _create_job(data: bytes, filename: str, owner: int, source_lang: str, target_lang: str,
-                style: str, glossary: str) -> Job:
+                style: str, glossary: str, batch_id: str = "", page_index: int = 0) -> Job:
     job = Job(id=_new_id(), filename=filename, source_lang=source_lang, target_lang=target_lang,
-              style=style, glossary=glossary, owner=owner, created_at=time.time())
+              style=style, glossary=glossary, owner=owner, created_at=time.time(),
+              batch_id=batch_id, page_index=page_index)
     job.dir.mkdir(parents=True, exist_ok=True)
     # Normalize every upload (PNG/JPG/WebP/HEIC/...) to PNG
     Image.open(io.BytesIO(data)).convert("RGB").save(job.dir / "original.png")
     job.save()
     with _lock:
         _jobs[job.id] = job
-    _executor.submit(_run, job)
     return job
 
 
@@ -103,19 +135,19 @@ def get_job(job_id: str) -> Job | None:
     return job
 
 
-def _run(job: Job):
-    if job.id in _deleted:
-        return
-
+def _run(job: Job, context: PageContext | None = None):
     def progress(stage: str):
         job.stage = stage
         job.save()
 
     try:
+        if job.id in _deleted:
+            return
         job.status = "running"
         img = _load_rgb(job.dir / "original.png")
         regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress,
-                                                style=job.style, glossary=job.glossary)
+                                                style=job.style, glossary=job.glossary,
+                                                context=context)
         if job.id in _deleted:
             return
         Image.fromarray(cleaned).save(job.dir / "cleaned.png")
@@ -127,6 +159,9 @@ def _run(job: Job):
             return
         log.error("Job %s failed:\n%s", job.id, traceback.format_exc())
         job.status, job.error = "error", f"{type(e).__name__}: {e}"
+    finally:
+        if context:
+            context.publish([])  # no-op if already published; unblocks the next page otherwise
     job.save()
 
 
@@ -182,15 +217,20 @@ class Batch:
 
 def create_batch(pages, name: str, owner: int, source_lang: str, target_lang: str,
                  style: str = "standard", glossary: str = "") -> Batch:
-    """pages: list of archives.Page. Jobs run one at a time, in page order."""
+    """pages: list of archives.Page, in reading order."""
     batch = Batch(id=_new_id(), name=name, owner=owner, created_at=time.time(),
                   source_lang=source_lang, target_lang=target_lang, style=style)
-    for page in pages:
-        job = _create_job(page.data, page.name, owner, source_lang, target_lang, style, glossary)
-        batch.page_ids.append(job.id)
+    page_jobs = [_create_job(page.data, page.name, owner, source_lang, target_lang, style, glossary,
+                             batch_id=batch.id, page_index=i)
+                 for i, page in enumerate(pages)]
+    batch.page_ids = [j.id for j in page_jobs]
     batch.save()
     with _lock:
         _batches[batch.id] = batch
+    # Submit in page order (required by _Chain), only once every page is saved
+    chain = _Chain(len(page_jobs))
+    for i, job in enumerate(page_jobs):
+        _executor.submit(_run, job, chain.context_for(i))
     return batch
 
 

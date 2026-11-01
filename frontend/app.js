@@ -129,6 +129,8 @@ function resetBatchView() {
 }
 
 function renderStages(stage) {
+  // "waiting" = queued for translation behind the previous page; show it on the Translate step
+  if (stage === "waiting") stage = "translating";
   const idx = stage === "done" ? STAGES.length : STAGES.indexOf(stage);
   document.querySelectorAll("#stages li").forEach((li, i) => {
     li.className = i < idx ? "done" : i === idx ? "active" : "";
@@ -150,7 +152,8 @@ async function pollBatch() {
   $("#batch-count").textContent =
     `${batch.done} / ${batch.total} pages translated` + (batch.failed ? ` · ${batch.failed} failed` : "");
 
-  const running = batch.pages.find((p) => p.status === "running");
+  const running = batch.pages.find((p) => p.status === "running" && p.stage !== "waiting")
+    || batch.pages.find((p) => p.status === "running");
   renderStages(running ? running.stage : batch.status === "done" ? "done" : "queued");
 
   const multi = batch.total > 1;
@@ -193,7 +196,8 @@ function renderStrip() {
       el.addEventListener("click", () => selectPage(p.id));
       strip.appendChild(el);
     }
-    const label = { queued: "Waiting", running: "Working…", done: "Done", error: "Failed" }[p.status];
+    const label = p.stage === "waiting" ? "In line…"
+      : { queued: "Waiting", running: "Working…", done: "Done", error: "Failed" }[p.status];
     el.querySelector(".state").textContent = label;
     el.classList.remove("queued", "running", "done", "error");
     el.classList.add(p.status);

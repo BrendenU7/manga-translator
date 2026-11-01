@@ -5,7 +5,10 @@ Portfolio project; keep code readable and well commented over clever.
 
 ## Layout
 - `backend/app/main.py`: FastAPI routes; also serves `frontend/` as static files
-- `backend/app/jobs.py`: in-memory job store + single worker thread; files in `data/<job_id>/`.
+- `backend/app/jobs.py`: job store + pool of WORKERS threads; files in `data/<job_id>/`.
+  `_Chain` makes a batch translate in page order, passing earlier dialogue via
+  `pipeline.PageContext` (pipeline = prepare_page -> translate_page -> finish_page).
+  EasyOCR/manga-ocr calls go through `detect.MODEL_LOCK`.
   A `Batch` is a list of page job ids (saved in `data/batches/`).
 - `backend/app/auth.py`: users + sessions in SQLite (`data/app.db`); `Depends(current_user)` on routes.
   Every Batch/Job has `owner` and `created_at`; check ownership (404 if not yours).
@@ -41,5 +44,5 @@ Portfolio project; keep code readable and well commented over clever.
 - Don't commit copyrighted manga pages; use `samples/make_sample.py` for fixtures.
 
 ## Next up (see README roadmap)
-Approved phases: (2) context across pages + parallel processing, (3) before/after slider,
+Approved phases (1-2 done): (3) before/after slider,
 reader, font picker, (4) webtoon long strips, (5) scan cleanup + LaMa, (6) browser extension.
