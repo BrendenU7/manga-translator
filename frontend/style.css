@@ -202,3 +202,11 @@ a[aria-disabled="true"] { opacity: .4; pointer-events: none; }
   align-items: center; justify-content: center; background: rgba(0,0,0,.6); color: #ddd; }
 .reader-bar button { background: #2a2a32; color: #eee; font-weight: 500; padding: 6px 14px; }
 .reader-bar button.on { background: var(--accent); color: #fff; }
+
+/* Long webtoon strips */
+.compare.strip { display: block; max-width: 760px; margin: 0 auto; }
+.compare.strip #cmp-translated { max-height: none; width: 100%; }
+#reader.scroll { display: block; overflow-y: auto; }
+#reader.scroll #reader-img { display: block; margin: 0 auto; max-height: none; width: min(800px, 100vw); }
+#reader.scroll .reader-zone { display: none; }  /* scroll to read; arrows/buttons still flip */
+#reader.scroll .reader-bar { position: fixed; }

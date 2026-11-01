@@ -237,6 +237,10 @@ function showResult(page) {
   $("#img-translated").src = bust(page.translated_url);
   $("#cmp-original").src = page.original_url;
   $("#cmp-translated").src = $("#img-translated").src;
+  // Long webtoon strips scroll at full width instead of shrinking to the window height
+  $("#img-translated").onload = (e) => {
+    $("#compare").classList.toggle("strip", isStrip(e.target));
+  };
   $("#edit-font").value = page.font_style || "manga";
   $("#download").href = page.translated_url;
   const stem = page.filename.split(" / ").pop().replace(/\.\w+$/, "");
@@ -298,6 +302,10 @@ $("#font-style").addEventListener("change", (e) => {
   cmp.addEventListener("pointerup", () => { dragging = false; });
 })();
 
+function isStrip(img) {
+  return img.naturalHeight > 2.5 * img.naturalWidth;
+}
+
 // ------------------------------------------------------------------ fullscreen reader
 
 const reader = { pages: [], index: 0, original: false };
@@ -311,7 +319,12 @@ function readerPages() {
 function renderReader() {
   const id = reader.pages[reader.index];
   if (!id) return;
-  $("#reader-img").src = `/api/jobs/${id}/image/${reader.original ? "original" : "translated"}`;
+  const img = $("#reader-img");
+  img.onload = () => {
+    // Strips: full width, scroll down to read. Pages: fit the whole page on screen.
+    $("#reader").classList.toggle("scroll", isStrip(img));
+  };
+  img.src = `/api/jobs/${id}/image/${reader.original ? "original" : "translated"}`;
   $("#reader-count").textContent = `${reader.index + 1} / ${reader.pages.length}`;
   $("#reader-orig").classList.toggle("on", reader.original);
   // Preload the next page so flipping is instant
@@ -336,6 +349,7 @@ function closeReader() {
 
 function flip(step) {
   reader.index = Math.min(reader.pages.length - 1, Math.max(0, reader.index + step));
+  $("#reader").scrollTop = 0;
   renderReader();
 }
 

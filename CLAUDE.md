@@ -26,7 +26,9 @@ Portfolio project; keep code readable and well commented over clever.
   - `models.TextRegion` is the shared type (box, line_boxes, source/translated text, vertical, on_light_bg, render_box)
 - `frontend/`: plain HTML/CSS/JS, no build step. Colors are CSS variables with a
   `[data-theme="dark"]` override; never hard-code colors.
-- `samples/make_sample.py`: generates a synthetic test page
+- `samples/make_sample.py` / `make_webtoon.py`: synthetic test page / long Korean strip
+- Long strips: `detect.slice_strip` (gutter-aware slices) + `_merge_regions`; translate.py
+  chunks >30 bubbles (MAX_BUBBLES_PER_CALL) and skips the full-page image for strips
 - `tests/`: pytest; `slow` marker = loads OCR models
 
 ## Commands
@@ -45,4 +47,4 @@ Portfolio project; keep code readable and well commented over clever.
 - Don't commit copyrighted manga pages; use `samples/make_sample.py` for fixtures.
 
 ## Next up (see README roadmap)
-Approved phases (1-3 done): (4) webtoon long strips, (5) scan cleanup + LaMa, (6) browser extension.
+Approved phases (1-4 done): (5) scan cleanup + LaMa, (6) browser extension.

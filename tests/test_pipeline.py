@@ -153,3 +153,78 @@ def test_every_target_language_has_a_prompt_name():
     assert set(config.TARGET_LANGS) <= set(config.LANG_NAMES_EN)
     assert set(config.SOURCE_LANGS) <= set(config.LANG_NAMES_EN)
     assert len(config.TARGET_LANGS) == 27
+
+
+# --------------------------------------------------------------------- webtoon strips
+
+from backend.app.pipeline import detect as det
+
+
+def _strip(gutters_at, h=4000, w=800):
+    """Grey 'artwork' with white gutters at the given rows."""
+    img = np.full((h, w, 3), 120, np.uint8)
+    img[:, ::7] = 60  # texture so non-gutter rows aren't uniform
+    for y in gutters_at:
+        img[y:y + 80] = 255
+    return img
+
+
+def test_strip_is_cut_in_the_gutters():
+    img = _strip([1200, 2500])
+    slices = det.slice_strip(img)
+    assert slices[0][0] == 0 and slices[-1][1] == 4000
+    cuts = [b for _, b in slices[:-1]]
+    assert all(any(g <= c <= g + 80 for g in (1200, 2500)) for c in cuts), cuts
+
+
+def test_strip_without_gutters_overlaps_slices():
+    slices = det.slice_strip(_strip([]))
+    assert all(nxt[0] < cur[1] for cur, nxt in zip(slices, slices[1:]))  # overlapping
+    assert slices[-1][1] == 4000
+
+
+def test_normal_pages_are_not_strips():
+    assert not det.is_long_strip(np.zeros((1200, 850, 3), np.uint8))
+    assert det.is_long_strip(np.zeros((6000, 800, 3), np.uint8))
+
+
+def test_duplicate_detections_from_overlap_are_merged():
+    a = TextRegion(id=0, box=(100, 1000, 300, 1100), line_boxes=[(100, 1000, 300, 1100)])
+    b = TextRegion(id=0, box=(100, 1020, 300, 1140), line_boxes=[(100, 1020, 300, 1140)])
+    c = TextRegion(id=0, box=(100, 2000, 300, 2100), line_boxes=[(100, 2000, 300, 2100)])
+    merged = det._merge_regions([a, b, c])
+    assert len(merged) == 2
+    assert (100, 1000, 300, 1140) in [m.box for m in merged]
+
+
+def test_strip_reads_top_to_bottom_bubble_by_bubble():
+    # Two bubbles 300px apart on a 6000px strip must not land in the same reading band
+    upper_left = TextRegion(id=0, box=(50, 1000, 200, 1100))
+    lower_right = TextRegion(id=0, box=(500, 1300, 700, 1400))
+    ordered = det.reading_order([lower_right, upper_left], img_h=6000, rtl=True, img_w=800)
+    assert ordered == [upper_left, lower_right]
+
+
+def test_long_pages_translate_in_chunks_with_context(monkeypatch):
+    calls = []
+
+    def fake(chunk, s, t, page, style, glossary, previous):
+        calls.append(([r.id for r in chunk], len(previous)))
+        return {r.id: {"source": "", "text": f"t{r.id}"} for r in chunk}
+
+    monkeypatch.setattr(translate, "translate_mock", fake)
+    monkeypatch.setattr(translate.config, "TRANSLATOR", "mock")
+    regions = [TextRegion(id=i, box=(0, 0, 1, 1), source_text="x") for i in range(65)]
+    out = translate.translate_regions(regions, "ko", "en")
+    assert [len(ids) for ids, _ in calls] == [30, 30, 5]
+    assert [ctx for _, ctx in calls] == [0, 30, 60]  # each chunk sees the earlier ones
+    assert out[64].translated_text == "t64"
+
+
+def test_strip_prompt_skips_the_full_page_image(monkeypatch):
+    monkeypatch.setattr(translate.config, "CLAUDE_VISION", True)
+    strip = np.full((5000, 800, 3), 255, np.uint8)
+    regions = [TextRegion(id=0, box=(10, 10, 200, 90), source_text="a")]
+    _, messages = translate.build_messages(regions, "ko", "en", page=strip)
+    images = [c for c in messages[0]["content"] if c["type"] == "image"]
+    assert len(images) == 1  # just the bubble

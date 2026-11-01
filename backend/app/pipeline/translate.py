@@ -48,7 +48,12 @@ Return ONLY a JSON object:
 {{"translations": [{{"id": <id>, "source": "<the original text as you read it>", "text": "<translation>"}}, ...]}}"""
 
 
-MAX_CONTEXT_LINES = 40  # most recent lines from earlier pages sent as context
+MAX_CONTEXT_LINES = 40      # most recent lines from earlier pages sent as context
+MAX_BUBBLES_PER_CALL = 30   # long webtoon strips are translated in chunks of this many bubbles
+
+
+def _is_strip(page: np.ndarray | None) -> bool:
+    return page is not None and page.shape[0] > 2.5 * page.shape[1]
 
 
 def _context_block(previous: list[dict]) -> str:
@@ -119,8 +124,13 @@ def build_messages(regions: list[TextRegion], source_lang: str, target_lang: str
         text = f"{header}\n{json.dumps(bubbles, ensure_ascii=False, indent=1)}"
         return system, [{"role": "user", "content": text}]
 
-    content: list[dict] = [{"type": "text", "text": f"{header}\nThe full page, for context:"},
-                           _image_block(page, 1200)]
+    if _is_strip(page):
+        # Scaled down to fit, a long webtoon strip is an unreadable sliver: send only the bubbles
+        content: list[dict] = [{"type": "text", "text": f"{header}\nThis is part of a long vertical "
+                                "webtoon strip; the bubbles are in order from top to bottom."}]
+    else:
+        content = [{"type": "text", "text": f"{header}\nThe full page, for context:"},
+                   _image_block(page, 1200)]
     for r in regions:
         hint = f" (OCR reading: {json.dumps(r.source_text, ensure_ascii=False)})" if r.source_text else ""
         content.append({"type": "text", "text": f"Bubble id={r.id}{hint}:"})
@@ -162,7 +172,15 @@ def translate_regions(regions: list[TextRegion], source_lang: str, target_lang: 
     if not regions:
         return regions
     fn = translate_claude if config.TRANSLATOR == "claude" else translate_mock
-    result = fn(regions, source_lang, target_lang, page, style, glossary, previous)
+    # Usually one call per page. Very long pages (webtoon strips) go in chunks, each chunk
+    # seeing the dialogue of the chunks before it.
+    result: dict[int, dict] = {}
+    context = list(previous or [])
+    for start in range(0, len(regions), MAX_BUBBLES_PER_CALL):
+        chunk = regions[start:start + MAX_BUBBLES_PER_CALL]
+        part = fn(chunk, source_lang, target_lang, page, style, glossary, context)
+        result.update(part)
+        context += [part[r.id] for r in chunk if r.id in part]
     for r in regions:
         item = result.get(r.id, {})
         r.translated_text = item.get("text", "")

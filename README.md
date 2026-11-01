@@ -40,6 +40,12 @@ erasing overlap. Translation is chained in page order: each page waits for the p
 one and gets the last two pages' dialogue as context, so names, terms and each
 character's voice stay consistent across a chapter.
 
+**Webtoons / long strips:** images taller than 2.5× their width are detected slice by
+slice (cut in the blank gutters between panels, or with overlap where there are none),
+read top to bottom, and translated in chunks of 30 bubbles that each see the previous
+chunk. The reader and slider show strips at full width with scrolling.
+Test strip: `python samples/make_webtoon.py`.
+
 **Accounts + dashboard:** sign up / log in (scrypt-hashed passwords, httponly session
 cookies, SQLite in `data/app.db`). Every upload belongs to its user; other users get 404s.
 The Dashboard lists your recent translations (open, download ZIP, delete), and everything
@@ -113,7 +119,7 @@ pytest                 # includes an end-to-end run on the sample page
 - [x] Accounts, dashboard, 10-day auto-delete
 - [x] Context across pages + parallel processing
 - [x] Before/after slider, reader, font picker
-- [ ] Webtoon long-strip support
+- [x] Webtoon long-strip support
 - [ ] Scan cleanup + LaMa inpainting
 - [ ] Browser extension
 - [ ] Optional cloud storage (Cloudflare R2 / Backblaze B2)
