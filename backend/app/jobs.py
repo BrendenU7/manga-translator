@@ -14,6 +14,7 @@ RETENTION_DAYS is deleted automatically by `cleanup_expired()`.
 import io
 import json
 import logging
+import os
 import re
 import shutil
 import threading
@@ -44,6 +45,26 @@ ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 def _new_id() -> str:
     return uuid.uuid4().hex[:12]
+
+
+def _write_json(path: Path, data: dict):
+    """Save JSON safely: always UTF-8 (Windows defaults to a legacy encoding that can't
+    store Japanese), and atomically (write a temp file, then swap it in), so a crash or
+    error mid-write can never leave a half-written or empty file behind."""
+    tmp = path.with_suffix(f".{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_json(path: Path) -> dict | None:
+    """Load JSON, or None (with a warning) if the file is missing or damaged."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (ValueError, UnicodeDecodeError) as e:
+        log.warning("Skipping damaged file %s (%s)", path, e)
+        return None
 
 
 def _load_rgb(path: Path) -> np.ndarray:
@@ -81,7 +102,7 @@ class Job:
         if self.id in _deleted:
             return
         self.dir.mkdir(parents=True, exist_ok=True)
-        (self.dir / "job.json").write_text(json.dumps(asdict(self), ensure_ascii=False, indent=1))
+        _write_json(self.dir / "job.json", asdict(self))
 
 
 class _Chain:
@@ -135,9 +156,15 @@ def get_job(job_id: str) -> Job | None:
     with _lock:
         job = _jobs.get(job_id)
         if job is None:
-            path = config.DATA_DIR / job_id / "job.json"
-            if path.exists():
-                job = Job(**json.loads(path.read_text()))
+            data = _read_json(config.DATA_DIR / job_id / "job.json")
+            if data is not None:
+                job = Job(**{k: v for k, v in data.items() if k in Job.__dataclass_fields__})
+                if job.status in ("queued", "running"):
+                    # Every live page is kept in memory, so one only found on disk was
+                    # cut off by a server restart and will never finish on its own
+                    job.status, job.stage = "error", "error"
+                    job.error = "Interrupted by a server restart. Please translate this page again."
+                    job.save()
                 _jobs[job_id] = job
     return job
 
@@ -195,6 +222,30 @@ def update_translations(job: Job, edits: dict[int, str], font_style: str | None 
     return job
 
 
+def _recover_job(job_id: str, batch: "Batch", index: int) -> Job | None:
+    """Rebuild a page whose job.json is missing or damaged, from the images on disk.
+
+    Older versions could leave job.json empty on Windows (non-UTF-8 default encoding).
+    The images were already saved, so a finished page is still viewable and downloadable;
+    only its editable bubble list is lost.
+    """
+    folder = config.DATA_DIR / job_id
+    if not ID_RE.match(job_id) or not (folder / "original.png").exists():
+        return None
+    done = (folder / "translated.png").exists()
+    job = Job(id=job_id, filename=f"page {index + 1}", source_lang=batch.source_lang,
+              target_lang=batch.target_lang, style=batch.style, font_style=batch.font_style,
+              quality=batch.quality, owner=batch.owner, created_at=batch.created_at,
+              batch_id=batch.id, page_index=index,
+              status="done" if done else "error", stage="done" if done else "error",
+              error="" if done else "This page's saved data was damaged. Please translate it again.")
+    job.save()
+    with _lock:
+        _jobs[job_id] = job
+    log.info("Recovered page %s from its images", job_id)
+    return job
+
+
 def _delete_job(job_id: str):
     with _lock:
         _deleted.add(job_id)
@@ -229,10 +280,15 @@ class Batch:
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(asdict(self), ensure_ascii=False))
+        _write_json(self.path, asdict(self))
 
     def pages(self) -> list[Job]:
-        return [j for j in (get_job(pid) for pid in self.page_ids) if j is not None]
+        pages = []
+        for i, pid in enumerate(self.page_ids):
+            job = get_job(pid) or _recover_job(pid, self, i)
+            if job is not None:
+                pages.append(job)
+        return pages
 
 
 def create_batch(pages, name: str, owner: int, source_lang: str, target_lang: str,
@@ -263,9 +319,9 @@ def get_batch(batch_id: str) -> Batch | None:
     with _lock:
         batch = _batches.get(batch_id)
         if batch is None:
-            path = config.DATA_DIR / "batches" / f"{batch_id}.json"
-            if path.exists():
-                batch = Batch(**json.loads(path.read_text()))
+            data = _read_json(config.DATA_DIR / "batches" / f"{batch_id}.json")
+            if data is not None:
+                batch = Batch(**{k: v for k, v in data.items() if k in Batch.__dataclass_fields__})
                 _batches[batch_id] = batch
     return batch
 

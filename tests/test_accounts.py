@@ -156,3 +156,65 @@ def test_extension_api_key(app):
     assert ext.get("/api/auth/me", headers=headers).status_code == 401
     alice.delete("/api/auth/api-key")
     assert ext.get("/api/auth/me", headers={"Authorization": f"Bearer {key2}"}).status_code == 401
+
+
+# --------------------------------------------------------------------- damaged / old data
+
+def _forget_memory():
+    jobs._jobs.clear()
+    jobs._batches.clear()
+
+
+def test_dashboard_survives_empty_job_file_from_old_windows_bug(app):
+    alice = new_client(app, "alice")
+    batch = upload(alice)
+    page = batch["pages"][0]["id"]
+    (config.DATA_DIR / page / "job.json").write_text("", encoding="utf-8")  # what the bug left behind
+    _forget_memory()                                                      # as after a server restart
+
+    res = alice.get("/api/batches")
+    assert res.status_code == 200
+    b = res.json()["batches"][0]
+    assert b["total"] == 1 and b["pages"][0]["status"] == "done"          # rebuilt from its images
+    assert alice.get(f"/api/jobs/{page}/image/translated").status_code == 200
+
+
+def test_damaged_page_without_result_shows_an_error(app):
+    alice = new_client(app, "alice")
+    batch = upload(alice)
+    page = batch["pages"][0]["id"]
+    (config.DATA_DIR / page / "job.json").write_text("{not json", encoding="utf-8")
+    (config.DATA_DIR / page / "translated.png").unlink()
+    _forget_memory()
+    p = alice.get(f"/api/batches/{batch['id']}").json()["pages"][0]
+    assert p["status"] == "error"
+
+
+def test_page_cut_off_by_restart_is_marked_interrupted(app):
+    alice = new_client(app, "alice")
+    batch = upload(alice)
+    page = batch["pages"][0]["id"]
+    job = jobs.get_job(page)
+    job.status, job.stage = "running", "translating"
+    job.save()
+    _forget_memory()
+    data = alice.get(f"/api/jobs/{page}").json()
+    assert data["status"] == "error" and "restart" in data["error"]
+
+
+def test_saves_are_utf8_and_never_rely_on_the_os_default(app, monkeypatch):
+    from pathlib import Path
+    real = Path.write_text
+
+    def strict(self, data, encoding=None, *a, **k):
+        assert encoding is not None, f"write_text without an encoding: {self}"
+        return real(self, data, encoding, *a, **k)
+
+    monkeypatch.setattr(Path, "write_text", strict)
+    alice = new_client(app, "alice")
+    r = alice.post("/api/batches", files=[("files", ("p.png", png_bytes(), "image/png"))],
+                   data={"glossary": "悟飯 = Gohan", "name": "ドラゴンボール"})
+    assert r.status_code == 200
+    page = r.json()["pages"][0]["id"]
+    raw = (config.DATA_DIR / page / "job.json").read_bytes().decode("utf-8")
+    assert "悟飯" in raw

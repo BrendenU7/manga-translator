@@ -3,10 +3,19 @@ let langNames = {};
 
 async function loadDashboard() {
   await currentUser;
-  const [cfg, data] = await Promise.all([
-    fetch("/api/config").then((r) => r.json()),
-    fetch("/api/batches").then((r) => r.json()),
-  ]);
+  let cfg, data;
+  try {
+    [cfg, data] = await Promise.all([
+      fetch("/api/config").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+      fetch("/api/batches").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+    ]);
+  } catch (e) {
+    // Never fail silently: say so, and point at the server terminal for details
+    $("#retention-note").textContent =
+      `Couldn't load your translations (server error ${e.message}). Check the terminal running the app for details, then refresh.`;
+    $("#retention-note").classList.add("error");
+    return;
+  }
   langNames = { ...cfg.source_langs, ...cfg.target_langs };
   $("#retention-note").textContent =
     `Uploads and results are private to your account and deleted automatically after ${data.retention_days} days.`;
