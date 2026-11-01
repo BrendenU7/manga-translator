@@ -11,6 +11,7 @@ let batch = null;        // current batch, if any
 let selectedId = null;   // job id of the selected page in a batch
 let shownId = null;      // job id whose result is currently rendered
 let scrolledFor = null;  // batch id whose first page we already scrolled into view
+let shownStatus = null;  // status of the selected page when we last rendered it
 
 // ------------------------------------------------------------------ setup
 
@@ -29,6 +30,8 @@ async function loadConfig() {
     `<option value="${k}" ${k === cfg.default_quality ? "selected" : ""}>` +
     `${q.label} · ≈ ${fmtUsd(q.est_page_usd * 1000)} / 1,000 pages</option>`).join("");
   fill($("#edit-font"), cfg.font_styles, "manga");
+  $("#again-quality").innerHTML = Object.entries(cfg.qualities)
+    .map(([k, q]) => `<option value="${k}">${q.label.split(" (")[0]}</option>`).join("");
   if (cfg.translator === "mock") {
     $("#mode-note").hidden = false;
     $("#mode-note").textContent =
@@ -156,7 +159,15 @@ function showError(msg) {
 
 // ------------------------------------------------------------------ batch
 
+let pollTimer = null;
+
+// Start polling again (e.g. after a retry) unless a poll is already scheduled
+function ensurePolling() {
+  if (!pollTimer) pollBatch();
+}
+
 async function pollBatch() {
+  pollTimer = null;
   batch = await (await fetch(`/api/batches/${batch.id}`)).json();
   const finished = batch.done + batch.failed;
   $("#bar-fill").style.width = `${(100 * finished) / batch.total}%`;
@@ -173,26 +184,26 @@ async function pollBatch() {
   renderStrip();
   $("#page-strip").hidden = !multi;
   // Show the results area once there's something to show (a finished page, or the strip)
-  $("#result-panel").hidden = !multi && batch.done === 0;
+  // (a finished single page that failed also opens, so its Retry buttons are reachable)
+  $("#result-panel").hidden = !multi && batch.done === 0 && batch.status !== "done";
   setWorkspaceMode(batch.status !== "done" || batch.done > 0);
   $("#download-all").hidden = !multi || batch.done === 0;
   $("#download-all").href = batch.download_url;
 
   // Show the first finished page automatically, and refresh the selected one when it finishes
   if (!selectedId) {
-    const first = batch.pages.find((p) => p.status === "done");
+    const first = batch.pages.find((p) => p.status === "done")
+      || (batch.status === "done" && batch.pages.find((p) => p.status === "error"));
     if (first) selectPage(first.id);
   } else if (selectedId !== shownId) {
+    // Refresh the selected page when it finishes (or fails)
     const sel = batch.pages.find((p) => p.id === selectedId);
-    if (sel && sel.status === "done") selectPage(selectedId);
+    if (sel && (sel.status === "done" || sel.status === "error") && sel.status !== shownStatus) selectPage(selectedId);
   }
+  $("#retry-failed").hidden = !batch.failed;
+  $("#retry-failed").textContent = `↻ Retry failed (${batch.failed})`;
 
-  const failedPage = !multi && batch.pages[0].status === "error";
-  if (failedPage) {
-    const page = await (await fetch(`/api/jobs/${batch.pages[0].id}`)).json();
-    showError(page.error);
-  }
-  if (batch.status !== "done") return setTimeout(pollBatch, 1500);
+  if (batch.status !== "done") { pollTimer = setTimeout(pollBatch, 1500); return; }
   $("#translate-btn").disabled = false;
 }
 
@@ -213,14 +224,15 @@ function setWorkspaceMode(on) {
 }
 
 // ‹ 3 / 26 › between finished pages
+// Pages the arrows step through: finished and failed ones (failed pages show Retry)
 function donePageIds() {
-  return batch ? batch.pages.filter((p) => p.status === "done").map((p) => p.id) : [];
+  return batch ? batch.pages.filter((p) => p.status === "done" || p.status === "error").map((p) => p.id) : [];
 }
 
 function renderPageNav() {
   const ids = batch ? batch.pages.map((p) => p.id) : [];
   $("#page-nav").hidden = ids.length < 2;
-  const i = ids.indexOf(shownId);
+  const i = ids.indexOf(selectedId || shownId);
   $("#page-pos").textContent = i >= 0 ? `${i + 1} / ${ids.length}` : `– / ${ids.length}`;
 }
 
@@ -232,9 +244,9 @@ function scrollToWorkspace() {
 function stepPage(step) {
   const ids = donePageIds();
   if (!ids.length) return;
-  const i = ids.indexOf(shownId);
+  const i = ids.indexOf(selectedId);
   const next = ids[Math.min(ids.length - 1, Math.max(0, (i < 0 ? 0 : i) + step))];
-  if (next && next !== shownId) {
+  if (next && next !== selectedId) {
     selectPage(next);
     // Slide the thumbnail strip sideways to the current page (without scrolling the window)
     const thumb = document.querySelector(`.thumb[data-id="${next}"]`);
@@ -288,18 +300,64 @@ async function selectPage(id) {
   selectedId = id;
   document.querySelectorAll(".thumb").forEach((t) => t.classList.toggle("selected", t.dataset.id === id));
   const page = await (await fetch(`/api/jobs/${id}`)).json();
+  shownStatus = page.status;
+  $("#page-msg").hidden = true;
   if (page.status === "done") {
     job = page;
     showResult(page);
-  } else {
-    // Not translated yet: show the original only
-    $("#img-original").src = page.original_url;
-    $("#img-translated").removeAttribute("src");
-    $("#bubbles").innerHTML = `<p class="note">${
-      page.status === "error" ? "This page failed: " + page.error : "This page hasn't been translated yet."}</p>`;
-    shownId = null;
+    return;
   }
+  // Not translated (yet): show the original, and for a failure, why + Retry buttons
+  job = page;
+  shownId = null;
+  $("#img-original").src = page.original_url;
+  $("#cmp-original").src = page.original_url;
+  $("#img-translated").removeAttribute("src");
+  $("#bubbles").innerHTML = page.status === "error" ? ""
+    : '<p class="note">This page is being translated…</p>';
+  $("#retry-box").hidden = page.status !== "error";
+  $("#retry-reason").textContent = `This page failed: ${page.error || "unknown error"}`;
+  $("#edit-actions").hidden = true;
+  $("#again-box").hidden = true;
+  renderPageNav();
 }
+
+async function retryPage(id, quality) {
+  const res = await fetch(`/api/jobs/${id}/retry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(quality ? { quality } : {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    return pageMessage(err.detail || "Couldn't start the retry", true);
+  }
+  if (id === selectedId) {
+    shownId = null;
+    shownStatus = "queued";
+    $("#retry-box").hidden = true;
+    $("#edit-actions").hidden = true;
+    $("#again-box").hidden = true;
+    $("#bubbles").innerHTML = "";
+    pageMessage(`Translating this page again${quality === "best" ? " with Best quality" : ""}…`);
+  }
+  ensurePolling();
+}
+
+function pageMessage(text, bad = false) {
+  $("#page-msg").hidden = false;
+  $("#page-msg").textContent = text;
+  $("#page-msg").classList.toggle("bad", bad);
+}
+
+$("#retry-economy").addEventListener("click", () => retryPage(selectedId, job?.quality || "economy"));
+$("#retry-best").addEventListener("click", () => retryPage(selectedId, "best"));
+$("#again-btn").addEventListener("click", () => retryPage(selectedId, $("#again-quality").value));
+$("#retry-failed").addEventListener("click", async () => {
+  $("#retry-failed").disabled = true;
+  for (const p of batch.pages.filter((p) => p.status === "error")) await retryPage(p.id);
+  $("#retry-failed").disabled = false;
+});
 
 // ------------------------------------------------------------------ viewer + editor
 
@@ -307,6 +365,11 @@ function bust(url) { return `${url}?t=${Date.now()}`; }
 
 function showResult(page) {
   shownId = page.id;
+  shownStatus = page.status;
+  $("#retry-box").hidden = true;
+  $("#edit-actions").hidden = false;
+  $("#again-box").hidden = false;
+  $("#again-quality").value = page.quality === "best" ? "economy" : "best";  // suggest the other one
   renderCost();
   renderPageNav();
   $("#result-panel").hidden = false;
@@ -345,7 +408,7 @@ function showResult(page) {
 }
 
 $("#rerender-btn").addEventListener("click", async () => {
-  if (!job) return;
+  if (!job || job.status !== "done") return;
   const translations = [...document.querySelectorAll("#bubbles textarea")]
     .map((ta) => ({ id: Number(ta.dataset.id), text: ta.value }));
   $("#rerender-btn").disabled = true;
@@ -355,7 +418,7 @@ $("#rerender-btn").addEventListener("click", async () => {
     body: JSON.stringify({ translations, font_style: $("#edit-font").value }),
   });
   $("#rerender-btn").disabled = false;
-  if (!res.ok) return showError("Re-render failed");
+  if (!res.ok) return pageMessage("Re-render failed: this page isn't finished.", true);
   job = await res.json();
   $("#img-translated").src = bust(job.translated_url);
   $("#cmp-translated").src = $("#img-translated").src;

@@ -169,7 +169,35 @@ def get_job(job_id: str) -> Job | None:
     return job
 
 
-def _run(job: Job, context: PageContext | None = None):
+def friendly_error(e: Exception) -> str:
+    """Turn common failures into a plain-English reason and what to do about it."""
+    text = str(e)
+    try:
+        import anthropic
+        if isinstance(e, anthropic.AuthenticationError):
+            return "Your Claude API key was rejected. Check ANTHROPIC_API_KEY in .env, then restart the app."
+        if isinstance(e, anthropic.PermissionDeniedError):
+            return "Your Claude API key isn't allowed to use this model. Check the key's workspace in the Claude Console."
+        if isinstance(e, anthropic.RateLimitError):
+            return "Too many requests to Claude right now (rate limit). Wait a minute, then retry."
+        if isinstance(e, anthropic.APIConnectionError):
+            return "Couldn't reach Claude. Check your internet connection, then retry."
+        if isinstance(e, anthropic.APIStatusError):
+            if "credit balance" in text.lower():
+                return "Your Claude credit balance is too low. Add credits in the Claude Console, then retry."
+            if e.status_code == 529 or "overloaded" in text.lower():
+                return "Claude is busy right now (overloaded). Wait a minute, then retry."
+            if e.status_code >= 500:
+                return "Claude had a temporary server error. Retry this page."
+            return f"Claude refused the request ({e.status_code}): {getattr(e, 'message', text)[:200]}"
+    except ImportError:
+        pass
+    if isinstance(e, ValueError) and "JSON" in text:
+        return "Claude's reply couldn't be read. Retry this page (Best quality often helps)."
+    return f"{type(e).__name__}: {text[:250]}"
+
+
+def _run(job: Job, context: PageContext | None = None, earlier_usage: dict | None = None):
     def progress(stage: str):
         job.stage = stage
         job.save()
@@ -183,6 +211,10 @@ def _run(job: Job, context: PageContext | None = None):
             progress("enhancing")
             img = enhance_scan(img)
         usage = pricing.empty_usage()
+        if earlier_usage:  # a retry: keep counting what earlier attempts cost
+            for key in usage:
+                if key != "model":
+                    usage[key] = earlier_usage.get(key, 0) or 0
         try:
             regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress,
                                                     style=job.style, glossary=job.glossary,
@@ -200,11 +232,40 @@ def _run(job: Job, context: PageContext | None = None):
         if job.id in _deleted:
             return
         log.error("Job %s failed:\n%s", job.id, traceback.format_exc())
-        job.status, job.error = "error", f"{type(e).__name__}: {e}"
+        job.status, job.error = "error", friendly_error(e)
     finally:
         if context:
             context.publish([])  # no-op if already published; unblocks the next page otherwise
     job.save()
+
+
+def retry_job(job: Job, quality: str | None = None) -> Job:
+    """Translate a page again (after a failure, or to try another quality).
+
+    Uses the previous page's finished dialogue as context, like the first run did.
+    Usage/cost from the earlier attempt is kept and added to, since it was billed.
+    """
+    if job.status in ("queued", "running"):
+        raise ValueError("This page is already being translated")
+    previous: list[dict] = []
+    batch = get_batch(job.batch_id) if job.batch_id else None
+    if batch and job.page_index > 0:
+        prev = get_job(batch.page_ids[job.page_index - 1])
+        if prev and prev.status == "done":
+            previous = [{"source": r.get("source_text", ""), "text": r.get("translated_text", "")}
+                        for r in prev.regions]
+    if quality:
+        job.quality = quality
+    earlier_usage = dict(job.usage or {})
+    job.status, job.stage, job.error = "queued", "queued", ""
+    job.regions = []
+    job.save()
+    with _lock:
+        _deleted.discard(job.id)
+        _jobs[job.id] = job
+    context = PageContext(wait_for_previous=lambda: previous, publish=lambda lines: None)
+    _executor.submit(_run, job, context, earlier_usage)
+    return job
 
 
 def update_translations(job: Job, edits: dict[int, str], font_style: str | None = None) -> Job:

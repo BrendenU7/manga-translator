@@ -85,3 +85,18 @@ def test_cut_off_reply_is_an_error(fake_anthropic, monkeypatch):
     monkeypatch.setattr(FakeClient, "create", truncated)
     with pytest.raises(RuntimeError, match="cut off"):
         translate.translate_regions([TextRegion(id=0, box=(0, 0, 1, 1), source_text="x")], "ja", "en")
+
+
+def test_friendly_errors():
+    import anthropic, httpx
+    from backend.app.jobs import friendly_error
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    def status_err(cls, code, msg):
+        return cls(msg, response=httpx.Response(code, request=req), body=None)
+    assert "key was rejected" in friendly_error(status_err(anthropic.AuthenticationError, 401, "invalid x-api-key"))
+    assert "rate limit" in friendly_error(status_err(anthropic.RateLimitError, 429, "slow down"))
+    assert "credit balance" in friendly_error(
+        status_err(anthropic.BadRequestError, 400, "Your credit balance is too low to access the API"))
+    assert "busy" in friendly_error(status_err(anthropic.InternalServerError, 529, "Overloaded"))
+    assert "internet" in friendly_error(anthropic.APIConnectionError(request=req))
+    assert friendly_error(RuntimeError("boom")) == "RuntimeError: boom"

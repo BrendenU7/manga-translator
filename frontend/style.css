@@ -279,3 +279,22 @@ main.wide { padding-top: 8px; }
   #cost-info { order: 10; flex-basis: 100%; margin: 0; }
   #viewer figure img { max-height: 80vh; }
 }
+
+/* Retry */
+.button.retry { background: #e8590c; color: #fff; }
+.retry-box { border: 1px solid #e0313155; background: color-mix(in srgb, #e03131 8%, transparent);
+  border-radius: 10px; padding: 12px; margin: 10px 0; }
+.retry-box p { margin: 0 0 10px; color: #e03131; font-weight: 600; }
+.retry-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.page-msg { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft);
+  color: var(--accent); font-weight: 600; font-size: 14px; }
+.page-msg.bad { background: color-mix(in srgb, #e03131 12%, transparent); color: #e03131; }
+.again { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px;
+  padding-top: 12px; border-top: 1px solid var(--line); }
+.again select { max-width: 190px; }
+.thumb.error { outline: 2px solid #e03131; outline-offset: -2px; }
+
+/* Untranslated page: a calm placeholder instead of a broken-image icon */
+#img-translated:not([src]) { display: none; }
+.trans .placeholder { display: none; color: var(--muted); padding: 40px 0; }
+#img-translated:not([src]) + .placeholder { display: block; }

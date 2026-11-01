@@ -255,6 +255,24 @@ def edit_translations(job_id: str, body: EditRequest, user: User = Depends(curre
     return _job_json(job)
 
 
+class RetryRequest(BaseModel):
+    quality: str | None = None
+
+
+@app.post("/api/jobs/{job_id}/retry")
+def retry_page(job_id: str, body: RetryRequest | None = None, user: User = Depends(current_user)):
+    """Translate one page again: after a failure, or to try it at another quality."""
+    job = _job_or_404(job_id, user)
+    quality = body.quality if body else None
+    if quality and quality not in pricing.QUALITIES:
+        raise HTTPException(400, "Unsupported quality")
+    try:
+        job = jobs.retry_job(job, quality)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return _job_json(job)
+
+
 # ---------------------------------------------------------------- batches
 
 @app.post("/api/batches")

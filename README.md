@@ -42,6 +42,12 @@ thinking is billed as output. The app records the token counts each reply report
 the estimated cost per page, per chapter and on the Dashboard (`backend/app/pricing.py`;
 your Claude Console's Usage page has the exact bill).
 
+**Retry:** a page that fails shows why in plain English (key rejected, out of credits,
+Claude busy, no connection…) with **Retry this page** / **Retry with Best quality**;
+**Retry failed (n)** in the toolbar retries every failed page of a chapter. Finished pages
+can be **translated again** at the other quality to compare. Retries get the previous
+page's dialogue as context, and every attempt's cost is counted.
+
 **Chapters:** pages run on a pool of `WORKERS` threads (default 2), so detection, OCR and
 erasing overlap. Translation is chained in page order: each page waits for the previous
 one and gets the last two pages' dialogue as context, so names, terms and each
@@ -124,6 +130,7 @@ pytest                 # includes an end-to-end run on the sample page
 | `GET` | `/api/batches/{id}/download` | ZIP of all translated pages |
 | `GET` | `/api/jobs/{id}` | Status, current stage, regions (source and translated text, boxes) |
 | `GET` | `/api/jobs/{id}/image/{original,translated,cleaned}` | PNG |
+| `POST` | `/api/jobs/{id}/retry` | `{"quality": "best"}` (optional) → translate the page again |
 | `PUT` | `/api/jobs/{id}/translations` | `{"translations":[{"id":0,"text":"..."}]}` → re-render |
 
 ## Roadmap

@@ -165,3 +165,67 @@ def test_frontend_is_never_served_stale(client):
     res = client.get("/index.html")
     assert res.status_code == 200 and res.headers["cache-control"] == "no-cache"
     assert 'id="quality"' in res.text
+
+
+def test_failed_page_can_be_retried(client, monkeypatch):
+    from backend.app import pricing
+    attempts = []
+
+    def flaky(img, source_lang, target_lang, progress, **kw):
+        attempts.append(kw.get("quality"))
+        kw["usage"]["cost_usd"] += 0.001          # each attempt is billed
+        if len(attempts) == 1:
+            raise RuntimeError("Claude was overloaded")
+        return [], img, np.zeros_like(img)
+
+    monkeypatch.setattr(jobs, "run_pipeline", flaky)
+    files = [("files", ("p1.png", png_bytes(), "image/png"))]
+    batch = wait_for(client, f"/api/batches/{client.post('/api/batches', files=files).json()['id']}")
+    page = batch["pages"][0]
+    assert page["status"] == "error" and batch["failed"] == 1
+
+    res = client.post(f"/api/jobs/{page['id']}/retry", json={"quality": "best"})
+    assert res.status_code == 200
+    batch = wait_for(client, f"/api/batches/{batch['id']}")
+    assert batch["done"] == 1 and batch["failed"] == 0
+    assert attempts == ["economy", "best"]
+    assert batch["cost_usd"] == pytest.approx(0.002)   # both attempts counted
+
+    # A finished page can be translated again too; bad quality / running page are refused
+    assert client.post(f"/api/jobs/{page['id']}/retry", json={"quality": "luxury"}).status_code == 400
+    assert client.post(f"/api/jobs/{page['id']}/retry").status_code == 200
+
+
+def test_retry_gets_previous_page_as_context(client, monkeypatch):
+    import backend.app.pipeline as pipeline
+    from backend.app.pipeline.models import TextRegion
+    seen = []
+
+    def fake_prepare(img, source_lang, progress):
+        return [TextRegion(id=0, box=(0, 0, 10, 10), source_text="src")], None
+
+    def fake_translate(regions, *a, previous=None, **k):
+        seen.append([p["text"] for p in previous or []])
+        regions[0].translated_text = "line"
+        return regions
+
+    monkeypatch.setattr(pipeline, "prepare_page", fake_prepare)
+    monkeypatch.setattr(pipeline, "translate_regions", fake_translate)
+    monkeypatch.setattr(pipeline, "finish_page", lambda img, *a: (img, img))
+    monkeypatch.setattr(jobs, "run_pipeline", pipeline.run_pipeline)  # undo the fixture's fake
+    files = [("files", (f"p{i}.png", png_bytes(), "image/png")) for i in (1, 2)]
+    batch = wait_for(client, f"/api/batches/{client.post('/api/batches', files=files).json()['id']}")
+    seen.clear()
+    client.post(f"/api/jobs/{batch['pages'][1]['id']}/retry")
+    wait_for(client, f"/api/batches/{batch['id']}")
+    assert seen == [["line"]]   # page 2's retry saw page 1's dialogue
+
+
+def test_cannot_retry_someone_elses_page(client):
+    from fastapi.testclient import TestClient
+    from backend.app import main
+    files = [("files", ("p1.png", png_bytes(), "image/png"))]
+    batch = wait_for(client, f"/api/batches/{client.post('/api/batches', files=files).json()['id']}")
+    other = TestClient(main.app)
+    other.post("/api/auth/signup", json={"username": "other", "password": "password123"})
+    assert other.post(f"/api/jobs/{batch['pages'][0]['id']}/retry").status_code == 404

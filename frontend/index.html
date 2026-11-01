@@ -110,6 +110,7 @@
         </div>
         <span id="cost-info" class="note" title="Estimated from the token counts Claude reported. Your Claude Console's Usage page has the exact bill."></span>
         <div class="downloads">
+          <button id="retry-failed" class="button retry" type="button" hidden>↻ Retry failed</button>
           <button id="read-btn" class="button secondary" type="button" title="Fullscreen reader (← → keys, O = original)">⛶ Read</button>
           <a id="download" class="button secondary" download title="Download this page">⤓ Page</a>
           <a id="download-all" class="button" hidden title="Download all pages as a ZIP">⤓ All (ZIP)</a>
@@ -118,7 +119,7 @@
       <div class="workspace">
       <div id="viewer" class="side">
         <figure class="orig"><img id="img-original" alt="Original page"><figcaption>Original</figcaption></figure>
-        <figure class="trans"><img id="img-translated" alt="Translated page"><figcaption>Translated</figcaption></figure>
+        <figure class="trans"><img id="img-translated" alt="Translated page"><span class="placeholder">No translation yet</span><figcaption>Translated</figcaption></figure>
         <figure class="compare-wrap">
           <div id="compare" class="compare" style="--pos: 50%">
             <img id="cmp-translated" alt="Translated page">
@@ -132,10 +133,23 @@
       <div class="card editor">
         <h2>Edit translations</h2>
         <p class="note">Fix any line, then re-render. Only the typesetting step re-runs.</p>
+        <p id="page-msg" class="page-msg" hidden></p>
+        <div id="retry-box" class="retry-box" hidden>
+          <p id="retry-reason"></p>
+          <div class="retry-actions">
+            <button id="retry-economy" type="button">↻ Retry this page</button>
+            <button id="retry-best" class="button secondary" type="button">Retry with Best quality</button>
+          </div>
+        </div>
         <div id="bubbles"></div>
-        <div class="edit-actions">
+        <div class="edit-actions" id="edit-actions">
           <button id="rerender-btn">Re-render page</button>
           <label>Font <select id="edit-font"></select></label>
+        </div>
+        <div class="again" id="again-box">
+          <span class="note">Not happy with it?</span>
+          <select id="again-quality"></select>
+          <button id="again-btn" class="button secondary" type="button">↻ Translate again</button>
         </div>
       </div>
       </div>
