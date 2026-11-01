@@ -1,7 +1,6 @@
 // Manga Translator frontend.
 // One image -> a single job. Several files, or a ZIP/CBZ/PDF -> a batch of page jobs.
 // Either way, one page at a time is shown in the viewer + translation editor.
-const $ = (sel) => document.querySelector(sel);
 const STAGES = ["detecting", "reading", "translating", "cleaning", "typesetting"];
 const IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|avif|heic|heif)$/i;
 const SUPPORTED_RE = /\.(png|jpe?g|webp|gif|bmp|avif|heic|heif|zip|cbz|epub|rar|cbr|pdf)$/i;
@@ -102,9 +101,9 @@ document.addEventListener("paste", (e) => {
 // ------------------------------------------------------------------ start
 
 $("#translate-btn").addEventListener("click", async () => {
-  const isSingleImage = files.length === 1 && IMAGE_RE.test(files[0].name || "x.png");
+  // Every upload is a batch (one page or many), so it also shows on the dashboard
   const form = new FormData();
-  files.forEach((f) => form.append(isSingleImage ? "file" : "files", f, f.name || "pasted.png"));
+  files.forEach((f) => form.append("files", f, f.name || "pasted.png"));
   form.append("source_lang", $("#source-lang").value);
   form.append("target_lang", $("#target-lang").value);
   form.append("style", $("#style").value);
@@ -114,20 +113,20 @@ $("#translate-btn").addEventListener("click", async () => {
   $("#result-panel").hidden = true;
   $("#error").hidden = true;
   $("#progress-panel").hidden = false;
-  $("#batch-progress").hidden = isSingleImage;
   renderStages("queued");
-  batch = null; job = null; selectedId = null; shownId = null;
+  resetBatchView();
 
-  const res = await fetch(isSingleImage ? "/api/jobs" : "/api/batches", { method: "POST", body: form });
+  const res = await fetch("/api/batches", { method: "POST", body: form });
   if (!res.ok) return showError((await res.json()).detail || res.statusText);
-  if (isSingleImage) {
-    job = await res.json();
-    pollJob();
-  } else {
-    batch = await res.json();
-    pollBatch();
-  }
+  batch = await res.json();
+  history.replaceState(null, "", `?batch=${batch.id}`);  // reload/bookmark reopens this batch
+  pollBatch();
 });
+
+function resetBatchView() {
+  batch = null; job = null; selectedId = null; shownId = null;
+  $("#page-strip").innerHTML = "";
+}
 
 function renderStages(stage) {
   const idx = stage === "done" ? STAGES.length : STAGES.indexOf(stage);
@@ -142,19 +141,6 @@ function showError(msg) {
   $("#translate-btn").disabled = false;
 }
 
-// ------------------------------------------------------------------ single page
-
-async function pollJob() {
-  job = await (await fetch(`/api/jobs/${job.id}`)).json();
-  renderStages(job.stage);
-  if (job.status === "error") return showError(job.error);
-  if (job.status !== "done") return setTimeout(pollJob, 800);
-  $("#translate-btn").disabled = false;
-  $("#page-strip").hidden = true;
-  $("#download-all").hidden = true;
-  showResult(job);
-}
-
 // ------------------------------------------------------------------ batch
 
 async function pollBatch() {
@@ -167,9 +153,12 @@ async function pollBatch() {
   const running = batch.pages.find((p) => p.status === "running");
   renderStages(running ? running.stage : batch.status === "done" ? "done" : "queued");
 
+  const multi = batch.total > 1;
+  $("#batch-progress").hidden = !multi;
   renderStrip();
+  $("#page-strip").hidden = !multi;
   $("#result-panel").hidden = false;
-  $("#download-all").hidden = batch.done === 0;
+  $("#download-all").hidden = !multi || batch.done === 0;
   $("#download-all").href = batch.download_url;
 
   // Show the first finished page automatically, and refresh the selected one when it finishes
@@ -181,13 +170,17 @@ async function pollBatch() {
     if (sel && sel.status === "done") selectPage(selectedId);
   }
 
+  const failedPage = !multi && batch.pages[0].status === "error";
+  if (failedPage) {
+    const page = await (await fetch(`/api/jobs/${batch.pages[0].id}`)).json();
+    showError(page.error);
+  }
   if (batch.status !== "done") return setTimeout(pollBatch, 1500);
   $("#translate-btn").disabled = false;
 }
 
 function renderStrip() {
   const strip = $("#page-strip");
-  strip.hidden = false;
   batch.pages.forEach((p, i) => {
     let el = strip.querySelector(`[data-id="${p.id}"]`);
     if (!el) {
@@ -277,20 +270,19 @@ document.querySelectorAll(".seg button").forEach((b) =>
     $("#viewer").className = b.dataset.view;
   }));
 
-// ------------------------------------------------------------------ dark mode
-
-function renderThemeButton() {
-  const dark = document.documentElement.dataset.theme === "dark";
-  $("#theme-toggle").textContent = dark ? "☀" : "☾";
-  $("#theme-toggle").title = dark ? "Switch to light mode" : "Switch to dark mode";
+// Opened from the dashboard (or reloaded): /index.html?batch=<id>
+async function openBatchFromUrl() {
+  const id = new URLSearchParams(location.search).get("batch");
+  if (!id) return;
+  const res = await fetch(`/api/batches/${id}`);
+  if (!res.ok) return history.replaceState(null, "", location.pathname);
+  resetBatchView();
+  batch = await res.json();
+  $("#progress-panel").hidden = false;
+  pollBatch();
 }
 
-$("#theme-toggle").addEventListener("click", () => {
-  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("theme", next); } catch (e) { /* storage blocked: still works this visit */ }
-  renderThemeButton();
+currentUser.then(async () => {
+  await loadConfig();
+  openBatchFromUrl();
 });
-renderThemeButton();
-
-loadConfig();

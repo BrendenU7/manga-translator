@@ -7,6 +7,11 @@ Portfolio project; keep code readable and well commented over clever.
 - `backend/app/main.py`: FastAPI routes; also serves `frontend/` as static files
 - `backend/app/jobs.py`: in-memory job store + single worker thread; files in `data/<job_id>/`.
   A `Batch` is a list of page job ids (saved in `data/batches/`).
+- `backend/app/auth.py`: users + sessions in SQLite (`data/app.db`); `Depends(current_user)` on routes.
+  Every Batch/Job has `owner` and `created_at`; check ownership (404 if not yours).
+  `jobs.cleanup_expired()` deletes anything older than RETENTION_DAYS (background thread).
+- `frontend/common.js`: shared header (theme toggle, login redirect, logout); pages:
+  `index.html` (translate, `?batch=<id>` reopens), `dashboard.html`, `login.html`
 - `backend/app/archives.py`: uploads (images, ZIP/CBZ/EPUB, RAR/CBR, PDF) -> ordered pages
 - `backend/app/pipeline/`: one module per step; `__init__.run_pipeline` wires them together
   - `ctd.py`: comic-text-detector ONNX model (downloads to `models/` on first use); gives boxes + text mask
@@ -36,4 +41,5 @@ Portfolio project; keep code readable and well commented over clever.
 - Don't commit copyrighted manga pages; use `samples/make_sample.py` for fixtures.
 
 ## Next up (see README roadmap)
-Context across pages in a batch, then LaMa inpainting.
+Approved phases: (2) context across pages + parallel processing, (3) before/after slider,
+reader, font picker, (4) webtoon long strips, (5) scan cleanup + LaMa, (6) browser extension.

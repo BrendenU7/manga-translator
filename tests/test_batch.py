@@ -83,7 +83,9 @@ def client(tmp_path, monkeypatch):
         return [], img, np.zeros_like(img)
 
     monkeypatch.setattr(jobs, "run_pipeline", fake_pipeline)
-    return TestClient(main.app)
+    client = TestClient(main.app)
+    assert client.post("/api/auth/signup", json={"username": "reader", "password": "password123"}).status_code == 200
+    return client
 
 
 def wait_for(client, url, done=lambda d: d["status"] == "done", timeout=10):

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · Manga Translator</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
+</head>
+<body data-public="true">
+  <header>
+    <a class="brand" href="/"><span class="kanji">漫</span> Manga Translator</a>
+    <div class="header-right">
+      <button id="theme-toggle" type="button" aria-label="Toggle dark mode"></button>
+    </div>
+  </header>
+
+  <main class="narrow">
+    <section class="card auth-card">
+      <div class="seg tabs">
+        <button data-mode="login" class="active" type="button">Log in</button>
+        <button data-mode="signup" type="button">Create account</button>
+      </div>
+      <form id="auth-form">
+        <label>Username <input id="username" autocomplete="username" required minlength="3" maxlength="32"></label>
+        <label>Password <input id="password" type="password" autocomplete="current-password" required minlength="8"></label>
+        <p id="auth-error" class="error" hidden></p>
+        <button id="auth-submit" type="submit">Log in</button>
+      </form>
+      <p class="note">Your uploads are private to your account and deleted automatically after 10 days.</p>
+    </section>
+  </main>
+
+  <script src="common.js"></script>
+  <script>
+    let mode = "login";
+    document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+      mode = b.dataset.mode;
+      document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
+      $("#auth-submit").textContent = mode === "login" ? "Log in" : "Create account";
+      $("#password").autocomplete = mode === "login" ? "current-password" : "new-password";
+      $("#auth-error").hidden = true;
+    }));
+
+    $("#auth-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("#auth-submit").disabled = true;
+      const res = await fetch(`/api/auth/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: $("#username").value, password: $("#password").value }),
+      });
+      $("#auth-submit").disabled = false;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        $("#auth-error").hidden = false;
+        $("#auth-error").textContent = typeof err.detail === "string" ? err.detail : "Something went wrong";
+        return;
+      }
+      // Only follow same-site paths, never an outside URL
+      const next = new URLSearchParams(location.search).get("next") || "/";
+      location.href = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+    });
+  </script>
+</body>
+</html>

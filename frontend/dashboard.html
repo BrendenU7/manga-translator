@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · Manga Translator</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/"><span class="kanji">漫</span> Manga Translator</a>
+    <nav>
+      <a href="/index.html">Translate</a>
+      <a href="/dashboard.html">Dashboard</a>
+    </nav>
+    <div class="header-right">
+      <span id="user-name" class="note"></span>
+      <button id="logout" class="link-btn" type="button">Log out</button>
+      <button id="theme-toggle" type="button" aria-label="Toggle dark mode"></button>
+    </div>
+  </header>
+
+  <main>
+    <section class="dash-head">
+      <div>
+        <h2>Recent translations</h2>
+        <p id="retention-note" class="note"></p>
+      </div>
+      <a class="button" href="/index.html">+ New translation</a>
+    </section>
+    <div id="dash-grid"></div>
+    <p id="dash-empty" class="card note" hidden>
+      Nothing here yet. Translations you make show up here for 10 days.
+    </p>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

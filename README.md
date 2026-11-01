@@ -35,6 +35,11 @@ Russian, Thai, Arabic and Persian. `pipeline/fonts.py` picks a font that has eve
 character needed (bundled Comic Neue for Latin, then system fonts on Windows/macOS/Linux);
 Chinese/Japanese wrap per character, Arabic/Persian are shaped right-to-left.
 
+**Accounts + dashboard:** sign up / log in (scrypt-hashed passwords, httponly session
+cookies, SQLite in `data/app.db`). Every upload belongs to its user; other users get 404s.
+The Dashboard lists your recent translations (open, download ZIP, delete), and everything
+is deleted automatically after `RETENTION_DAYS` (default 10) by a background cleanup.
+
 **Dark mode:** toggle in the header; follows the system setting until you choose.
 
 Supported uploads: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC · ZIP, CBZ, EPUB · RAR, CBR
@@ -73,10 +78,14 @@ pytest                 # includes an end-to-end run on the sample page
 
 | Method | Path | |
 |---|---|---|
+| `POST` | `/api/auth/signup`, `/api/auth/login`, `/api/auth/logout` | JSON `{username, password}`; sets the session cookie |
+| `GET` | `/api/auth/me` | Current user (401 if logged out). All endpoints below need a login. |
 | `GET` | `/api/config` | Supported languages, translator mode |
 | `POST` | `/api/jobs` | multipart: `file`, `source_lang`, `target_lang`, `style`, `glossary` → job |
 | `POST` | `/api/batches` | multipart: `files` (repeat), same options → batch of page jobs |
 | `GET` | `/api/batches/{id}` | Progress (`done` / `total`) and each page's status |
+| `GET` | `/api/batches` | Dashboard: your batches, newest first, with expiry times |
+| `DELETE` | `/api/batches/{id}` | Delete a batch and its pages |
 | `GET` | `/api/batches/{id}/download` | ZIP of all translated pages |
 | `GET` | `/api/jobs/{id}` | Status, current stage, regions (source and translated text, boxes) |
 | `GET` | `/api/jobs/{id}/image/{original,translated,cleaned}` | PNG |
@@ -85,13 +94,18 @@ pytest                 # includes an end-to-end run on the sample page
 ## Roadmap
 
 - [x] Batch: ZIP/CBZ/EPUB/RAR/PDF upload, split into pages, download as ZIP
-- [ ] LaMa inpainting for text over artwork
 - [x] Manga-specific text detector (comic-text-detector)
 - [x] Claude reads bubble images (vision) instead of trusting OCR
 - [x] Translation styles + glossary
-- [ ] Context across pages in a batch (previous page's dialogue in the prompt)
 - [x] 27 target languages + auto-detect source
 - [x] Dark mode
+- [x] Accounts, dashboard, 10-day auto-delete
+- [ ] Context across pages + parallel processing
+- [ ] Before/after slider, reader, font picker
+- [ ] Webtoon long-strip support
+- [ ] Scan cleanup + LaMa inpainting
+- [ ] Browser extension
+- [ ] Optional cloud storage (Cloudflare R2 / Backblaze B2)
 - [ ] Font style choices
 - [ ] Drag/resize text boxes in the editor
 - [ ] Docker + deploy (backend on a GPU host, frontend static)

@@ -21,10 +21,15 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--ink); }
-header { padding: 28px 24px 8px; max-width: 1200px; margin: 0 auto; }
-h1 { margin: 0; font-size: 28px; }
-h1 span { font-weight: 800; letter-spacing: -.02em; }
-.tag { margin: 4px 0 0; color: var(--muted); }
+header { padding: 20px 24px 8px; max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; gap: 24px; }
+.brand { font-size: 22px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); text-decoration: none; }
+.brand .kanji { color: var(--accent); }
+nav { display: flex; gap: 4px; }
+nav a { color: var(--muted); text-decoration: none; font-weight: 600; padding: 6px 12px; border-radius: 8px; }
+nav a:hover { color: var(--ink); }
+nav a.active { color: var(--ink); background: var(--soft-2); }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 60px; display: grid; gap: 16px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
 h2 { margin: 0 0 4px; font-size: 17px; }
@@ -121,9 +126,36 @@ figcaption { text-align: center; color: var(--muted); font-size: 12px; padding-t
 .file-card .remove { position: absolute; right: 6px; top: 6px; width: 24px; height: 24px; padding: 0;
   border-radius: 50%; background: rgba(0,0,0,.65); font-size: 13px; line-height: 24px; }
 
-/* Header + theme toggle */
-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+/* Theme toggle */
 #theme-toggle { background: var(--surface); color: var(--ink); border: 1px solid var(--line);
   width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 18px; flex: 0 0 auto; }
 #theme-toggle:hover { border-color: var(--accent); }
 body, .card, select, textarea, figure { transition: background-color .2s, color .2s, border-color .2s; }
+
+/* Login */
+main.narrow { max-width: 420px; }
+.auth-card { display: grid; gap: 14px; }
+.tabs { display: flex; }
+.tabs button { flex: 1; }
+#auth-form { display: grid; gap: 12px; }
+#auth-form label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
+input { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* Dashboard */
+.dash-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+.dash-head h2 { font-size: 22px; }
+#dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.dash-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column; }
+.dash-thumb { display: block; height: 200px; background: var(--soft); }
+.dash-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.dash-body { padding: 12px; display: grid; gap: 2px; }
+.dash-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-body .note { margin: 0; font-size: 13px; }
+.expires { font-size: 12px; font-weight: 600; color: #e67700; margin-top: 4px; }
+.dash-actions { display: flex; gap: 6px; align-items: center; margin-top: 10px; }
+.dash-actions .button { padding: 6px 12px; font-size: 14px; }
+.link-btn.danger { margin-left: auto; color: #e03131; }
+a[aria-disabled="true"] { opacity: .4; pointer-events: none; }
