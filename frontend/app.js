@@ -23,6 +23,10 @@ async function loadConfig() {
   fill($("#source-lang"), cfg.source_langs, "auto");
   fill($("#target-lang"), cfg.target_langs, "en");
   fill($("#font-style"), cfg.font_styles, "manga");
+  // Quality: show what 1,000 pages would roughly cost with each
+  $("#quality").innerHTML = Object.entries(cfg.qualities).map(([k, q]) =>
+    `<option value="${k}" ${k === cfg.default_quality ? "selected" : ""}>` +
+    `${q.label} · ≈ ${fmtUsd(q.est_page_usd * 1000)} / 1,000 pages</option>`).join("");
   fill($("#edit-font"), cfg.font_styles, "manga");
   if (cfg.translator === "mock") {
     $("#mode-note").hidden = false;
@@ -111,6 +115,7 @@ $("#translate-btn").addEventListener("click", async () => {
   form.append("style", $("#style").value);
   form.append("glossary", $("#glossary").value);
   form.append("font_style", $("#font-style").value);
+  form.append("quality", $("#quality").value);
   form.append("enhance", $("#enhance").checked ? "true" : "false");
 
   $("#translate-btn").disabled = true;
@@ -162,10 +167,12 @@ async function pollBatch() {
   renderStages(running ? running.stage : batch.status === "done" ? "done" : "queued");
 
   const multi = batch.total > 1;
+  renderCost();
   $("#batch-progress").hidden = !multi;
   renderStrip();
   $("#page-strip").hidden = !multi;
-  $("#result-panel").hidden = false;
+  // Show the results area once there's something to show (a finished page, or the strip)
+  $("#result-panel").hidden = !multi && batch.done === 0;
   $("#download-all").hidden = !multi || batch.done === 0;
   $("#download-all").href = batch.download_url;
 
@@ -185,6 +192,15 @@ async function pollBatch() {
   }
   if (batch.status !== "done") return setTimeout(pollBatch, 1500);
   $("#translate-btn").disabled = false;
+}
+
+function renderCost() {
+  if (!batch) return;
+  const page = batch.pages.find((p) => p.id === shownId);
+  const parts = [];
+  if (page && batch.total > 1) parts.push(`This page: ${fmtUsd(page.cost_usd)}`);
+  parts.push(`${batch.total > 1 ? "All pages" : "Cost"}: ${fmtUsd(batch.cost_usd)}`);
+  $("#cost-info").textContent = `${parts.join(" · ")} (est.)`;
 }
 
 function renderStrip() {
@@ -234,6 +250,7 @@ function bust(url) { return `${url}?t=${Date.now()}`; }
 function showResult(page) {
   const firstShow = $("#result-panel").hidden;
   shownId = page.id;
+  renderCost();
   $("#result-panel").hidden = false;
   $("#img-original").src = page.original_url;
   $("#img-translated").src = bust(page.translated_url);

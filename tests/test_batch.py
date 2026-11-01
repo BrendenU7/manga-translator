@@ -147,3 +147,15 @@ def test_batch_can_be_named(client):
     files = [("files", ("p1.png", png_bytes(), "image/png"))]
     assert client.post("/api/batches", files=files, data={"name": "Chapter 22"}).json()["name"] == "Chapter 22"
     assert client.post("/api/batches", files=files).json()["name"] == "p1.png"
+
+
+def test_quality_is_saved_and_cost_reported(client):
+    files = [("files", ("p1.png", png_bytes(), "image/png"))]
+    assert client.post("/api/batches", files=files, data={"quality": "luxury"}).status_code == 400
+    batch = client.post("/api/batches", files=files, data={"quality": "best"}).json()
+    batch = wait_for(client, f"/api/batches/{batch['id']}")
+    assert batch["quality"] == "best"
+    assert "cost_usd" in batch and "cost_usd" in batch["pages"][0]
+    cfg = client.get("/api/config").json()
+    assert set(cfg["qualities"]) == {"economy", "best"}
+    assert cfg["qualities"]["economy"]["est_page_usd"] < cfg["qualities"]["best"]["est_page_usd"]

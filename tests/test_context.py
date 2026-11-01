@@ -49,7 +49,7 @@ def test_pages_translate_in_order_with_previous_dialogue(client, monkeypatch):
         time.sleep(0.05 * (4 - n))  # later pages finish preparing FIRST
         return [TextRegion(id=0, box=(0, 0, 10, 10), source_text=f"src{n}")], None
 
-    def fake_translate(regions, s, t, page=None, style="", glossary="", previous=None):
+    def fake_translate(regions, s, t, page=None, style="", glossary="", previous=None, **kw):
         n = int(page[0, 0, 0]) // 10
         with lock:
             calls.append((n, [p["text"] for p in previous or []]))

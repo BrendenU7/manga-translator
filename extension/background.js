@@ -6,7 +6,7 @@
 // Runs as a service worker in Chrome and as a background script in Firefox.
 
 const DEFAULTS = { server: "http://localhost:8000", apiKey: "", target: "en", fontStyle: "manga",
-                   style: "standard", enabledSites: [] };
+                   style: "standard", quality: "economy", enabledSites: [] };
 
 async function settings() {
   return { ...DEFAULTS, ...(await chrome.storage.local.get(Object.keys(DEFAULTS))) };
@@ -97,6 +97,7 @@ async function translateImages(tabId, requestId, images, pageUrl, title) {
     form.append("target_lang", s.target);
     form.append("style", s.style);
     form.append("font_style", s.fontStyle);
+    form.append("quality", s.quality);
     form.append("name", title || new URL(pageUrl).hostname);  // shown on the Dashboard
 
     send({ type: "status", text: "Uploading…" });

@@ -13,7 +13,7 @@ DATA_DIR = Path(os.getenv("DATA_DIR", ROOT / "data"))
 FRONTEND_DIR = ROOT / "frontend"
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")  # legacy; see pricing.QUALITIES
 
 # "claude" uses the Anthropic API; "mock" returns placeholder text (no key needed).
 TRANSLATOR = os.getenv("TRANSLATOR", "claude" if ANTHROPIC_API_KEY else "mock")

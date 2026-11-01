@@ -17,6 +17,8 @@ Portfolio project; keep code readable and well commented over clever.
   `index.html` (translate, `?batch=<id>` reopens), `dashboard.html`, `login.html`
 - `extension/`: MV3 browser extension (background.js uploads batches with `Bearer mtk_…`,
   content.js swaps images in place, popup.js settings). API keys live in auth.py `api_keys`.
+- `backend/app/pricing.py`: quality levels (economy=Haiku, best=Sonnet), thinking-off setting per
+  model, PRICES and cost_usd(). Jobs store `usage` (tokens + cost); batches sum it.
 - `backend/app/archives.py`: uploads (images, ZIP/CBZ/EPUB, RAR/CBR, PDF) -> ordered pages
 - `backend/app/pipeline/`: one module per step; `__init__.run_pipeline` wires them together
   - `ctd.py`: comic-text-detector ONNX model (downloads to `models/` on first use); gives boxes + text mask

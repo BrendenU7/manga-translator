@@ -16,7 +16,7 @@ import re
 import numpy as np
 from PIL import Image
 
-from .. import config
+from .. import config, pricing
 from .models import TextRegion
 
 STYLES = {
@@ -140,13 +140,29 @@ def build_messages(regions: list[TextRegion], source_lang: str, target_lang: str
 
 
 def translate_claude(regions, source_lang, target_lang, page=None, style="standard", glossary="",
-                     previous=None):
+                     previous=None, quality=pricing.DEFAULT_QUALITY, usage=None):
+    """One Claude call. `quality` picks the model; `usage` (a dict) collects tokens and cost."""
     import anthropic
 
+    model = pricing.QUALITIES.get(quality, pricing.QUALITIES[pricing.DEFAULT_QUALITY])["model"]
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     system, messages = build_messages(regions, source_lang, target_lang, page, style, glossary, previous)
-    resp = client.messages.create(model=config.CLAUDE_MODEL, max_tokens=4000,
-                                  system=system, messages=messages)
+    resp = client.messages.create(
+        model=model,
+        max_tokens=8000,                       # room for a very wordy page's JSON
+        thinking=pricing.thinking_off(model),  # translation needs little reasoning: save the tokens
+        system=system,
+        messages=messages,
+    )
+    if usage is not None and resp.usage is not None:
+        pricing.add_usage(usage, model, {
+            "input_tokens": resp.usage.input_tokens,
+            "output_tokens": resp.usage.output_tokens,
+            "cache_creation_input_tokens": getattr(resp.usage, "cache_creation_input_tokens", 0) or 0,
+            "cache_read_input_tokens": getattr(resp.usage, "cache_read_input_tokens", 0) or 0,
+        })
+    if resp.stop_reason == "max_tokens":
+        raise RuntimeError("Claude's reply was cut off (too many bubbles on one page)")
     text = "".join(block.text for block in resp.content if block.type == "text")
     return parse_response(text)
 
@@ -159,7 +175,7 @@ def parse_response(text: str) -> dict[int, dict]:
 
 
 def translate_mock(regions, source_lang, target_lang, page=None, style="standard", glossary="",
-                   previous=None):
+                   previous=None, quality=pricing.DEFAULT_QUALITY, usage=None):
     """Placeholder so the app runs without an API key."""
     return {r.id: {"source": "", "text": f"Mock translation for bubble {r.id + 1}."}
             for r in regions}
@@ -167,8 +183,10 @@ def translate_mock(regions, source_lang, target_lang, page=None, style="standard
 
 def translate_regions(regions: list[TextRegion], source_lang: str, target_lang: str,
                       page: np.ndarray | None = None, style: str = "standard",
-                      glossary: str = "", previous: list[dict] | None = None) -> list[TextRegion]:
-    """previous: dialogue from earlier pages [{"source", "text"}], used as context."""
+                      glossary: str = "", previous: list[dict] | None = None,
+                      quality: str = pricing.DEFAULT_QUALITY, usage: dict | None = None) -> list[TextRegion]:
+    """previous: dialogue from earlier pages [{"source", "text"}], used as context.
+    quality: "economy" or "best" (see pricing.py). usage: dict that collects tokens and cost."""
     if not regions:
         return regions
     fn = translate_claude if config.TRANSLATOR == "claude" else translate_mock
@@ -178,7 +196,8 @@ def translate_regions(regions: list[TextRegion], source_lang: str, target_lang: 
     context = list(previous or [])
     for start in range(0, len(regions), MAX_BUBBLES_PER_CALL):
         chunk = regions[start:start + MAX_BUBBLES_PER_CALL]
-        part = fn(chunk, source_lang, target_lang, page, style, glossary, context)
+        part = fn(chunk, source_lang, target_lang, page, style, glossary, context,
+                  quality=quality, usage=usage)
         result.update(part)
         context += [part[r.id] for r in chunk if r.id in part]
     for r in regions:

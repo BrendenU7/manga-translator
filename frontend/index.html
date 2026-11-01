@@ -49,6 +49,9 @@
       <div class="controls">
         <label>From <select id="source-lang"></select></label>
         <label>To <select id="target-lang"></select></label>
+        <label title="Economy uses Claude Haiku (much cheaper). Best uses Claude Sonnet (better with stylized lettering and wordplay).">
+          Quality <select id="quality"></select>
+        </label>
         <label>Style
           <select id="style">
             <option value="standard">Standard (natural, localized)</option>
@@ -94,6 +97,7 @@
           <button data-view="original">Original</button>
           <button data-view="slider">Slider</button>
         </div>
+        <span id="cost-info" class="note" title="Estimated from the token counts Claude reported. Your Claude Console's Usage page has the exact bill."></span>
         <div class="downloads">
           <button id="read-btn" class="button secondary" type="button" title="Fullscreen reader (← → keys, O = original)">⛶ Read</button>
           <a id="download" class="button secondary" download>Download page</a>

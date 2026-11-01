@@ -219,3 +219,5 @@ label.check input { width: 16px; height: 16px; accent-color: var(--accent); }
 .ext-card code { background: var(--soft-2); padding: 1px 6px; border-radius: 4px; }
 .key-row { display: flex; gap: 8px; }
 .key-row input { flex: 1; font-family: ui-monospace, monospace; font-size: 13px; }
+
+#cost-info { margin: 0 0 0 auto; padding-right: 8px; white-space: nowrap; }

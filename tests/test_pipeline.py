@@ -63,7 +63,7 @@ def test_translate_parses_model_json(monkeypatch):
                TextRegion(id=1, box=(0, 0, 1, 1), source_text="待そ")]  # OCR typo
     reply = ('Sure! {"translations": [{"id": 0, "source": "おい", "text": "Hey"}, '
              '{"id": 1, "source": "待て", "text": "Wait!"}]}')
-    monkeypatch.setattr(translate, "translate_claude", lambda *a: translate.parse_response(reply))
+    monkeypatch.setattr(translate, "translate_claude", lambda *a, **k: translate.parse_response(reply))
     monkeypatch.setattr(translate.config, "TRANSLATOR", "claude")
     out = translate.translate_regions(regions, "ja", "en")
     assert [r.translated_text for r in out] == ["Hey", "Wait!"]
@@ -208,7 +208,7 @@ def test_strip_reads_top_to_bottom_bubble_by_bubble():
 def test_long_pages_translate_in_chunks_with_context(monkeypatch):
     calls = []
 
-    def fake(chunk, s, t, page, style, glossary, previous):
+    def fake(chunk, s, t, page, style, glossary, previous, **kw):
         calls.append(([r.id for r in chunk], len(previous)))
         return {r.id: {"source": "", "text": f"t{r.id}"} for r in chunk}
 

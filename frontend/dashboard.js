@@ -11,6 +11,8 @@ async function loadDashboard() {
   $("#retention-note").textContent =
     `Uploads and results are private to your account and deleted automatically after ${data.retention_days} days.`;
   render(data.batches);
+  const total = data.batches.reduce((sum, b) => sum + (b.cost_usd || 0), 0);
+  $("#retention-note").textContent += ` Estimated Claude cost of everything here: ${fmtUsd(total)}.`;
   // Keep refreshing while something is still translating
   if (data.batches.some((b) => b.status !== "done")) setTimeout(loadDashboard, 3000);
 }
@@ -35,6 +37,7 @@ function render(batches) {
         <span class="note">${progress}</span>
         <span class="note">${escapeHtml(from)} → ${escapeHtml(langNames[b.target_lang] || b.target_lang)}</span>
         <span class="note">${fmtDate(b.created_at)}</span>
+        <span class="note">${b.quality === "best" ? "Best quality" : "Economy"} · est. ${fmtUsd(b.cost_usd)}</span>
         <span class="expires">${fmtExpires(b.expires_at)}</span>
         <div class="dash-actions">
           <a class="button" href="/index.html?batch=${b.id}">Open</a>

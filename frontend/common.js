@@ -65,3 +65,10 @@ function fmtExpires(ts) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
+
+// Money: small amounts are shown precisely ("$0.0006"), larger ones normally ("$1.24")
+function fmtUsd(x) {
+  if (!x) return "$0.00";
+  if (x < 0.01) return `$${x.toFixed(4)}`;
+  return `$${x.toFixed(2)}`;
+}

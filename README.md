@@ -35,6 +35,13 @@ Russian, Thai, Arabic and Persian. `pipeline/fonts.py` picks a font that has eve
 character needed (bundled Comic Neue for Latin, then system fonts on Windows/macOS/Linux);
 Chinese/Japanese wrap per character, Arabic/Persian are shaped right-to-left.
 
+**Quality and cost:** each page is one Claude request. Pick **Economy** (Claude Haiku 5.5,
+about $0.60 per 1,000 pages) or **Best quality** (Claude Sonnet 5.5, about $12 per 1,000
+pages). Both run with up-front thinking off, since translation needs little reasoning and
+thinking is billed as output. The app records the token counts each reply reports and shows
+the estimated cost per page, per chapter and on the Dashboard (`backend/app/pricing.py`;
+your Claude Console's Usage page has the exact bill).
+
 **Chapters:** pages run on a pool of `WORKERS` threads (default 2), so detection, OCR and
 erasing overlap. Translation is chained in page order: each page waits for the previous
 one and gets the last two pages' dialogue as context, so names, terms and each

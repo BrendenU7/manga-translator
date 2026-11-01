@@ -1,7 +1,7 @@
 // Popup: connect to your app, choose language/font, enable per site, translate all.
 const $ = (s) => document.querySelector(s);
 const DEFAULTS = { server: "http://localhost:8000", apiKey: "", target: "en", fontStyle: "manga",
-                   enabledSites: [] };
+                   quality: "economy", enabledSites: [] };
 let s = {};
 let tab = null;
 let host = "";
@@ -38,6 +38,8 @@ async function connect() {
     setConn(`Connected as ${me.username}`, "ok");
     fill($("#target"), cfg.target_langs, s.target);
     fill($("#font-style"), cfg.font_styles, s.fontStyle);
+    fill($("#quality"), Object.fromEntries(Object.entries(cfg.qualities).map(([k, q]) =>
+      [k, `${q.label.split(" (")[0]} · ≈ $${(q.est_page_usd * 1000).toFixed(2)} / 1,000 pages`])), s.quality);
     $("#setup").hidden = true;
     $("#main").hidden = false;
   } catch (e) {
@@ -70,6 +72,7 @@ $("#edit-setup").addEventListener("click", () => { $("#setup").hidden = false; }
 
 $("#target").addEventListener("change", (e) => chrome.storage.local.set({ target: e.target.value }));
 $("#font-style").addEventListener("change", (e) => chrome.storage.local.set({ fontStyle: e.target.value }));
+$("#quality").addEventListener("change", (e) => chrome.storage.local.set({ quality: e.target.value }));
 
 $("#site-toggle").addEventListener("change", async (e) => {
   const sites = new Set(s.enabledSites);

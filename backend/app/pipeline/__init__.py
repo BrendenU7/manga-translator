@@ -50,10 +50,11 @@ def prepare_page(img: np.ndarray, source_lang: str, progress: ProgressFn):
 
 
 def translate_page(img, regions, source_lang, target_lang, style, glossary,
-                   previous: list[dict], progress: ProgressFn) -> list[TextRegion]:
+                   previous: list[dict], progress: ProgressFn,
+                   quality: str = "economy", usage: dict | None = None) -> list[TextRegion]:
     progress("translating")
     regions = translate_regions(regions, source_lang, target_lang, page=img, style=style,
-                                glossary=glossary, previous=previous)
+                                glossary=glossary, previous=previous, quality=quality, usage=usage)
     # Claude returns "" for detections that aren't really text: leave those untouched
     regions = [r for r in regions if r.translated_text.strip()]
     for i, r in enumerate(regions):
@@ -71,8 +72,12 @@ def finish_page(img, regions, text_mask, target_lang, progress: ProgressFn, font
 def run_pipeline(img: np.ndarray, source_lang: str, target_lang: str,
                  progress: ProgressFn = lambda s: None,
                  style: str = "standard", glossary: str = "",
-                 context: PageContext | None = None, font_style: str = "manga"):
-    """Translate one page. Returns (regions, cleaned_image, translated_image)."""
+                 context: PageContext | None = None, font_style: str = "manga",
+                 quality: str = "economy", usage: dict | None = None):
+    """Translate one page. Returns (regions, cleaned_image, translated_image).
+
+    usage: optional dict; filled with the Claude tokens used and their estimated cost.
+    """
     published = False
     try:
         regions, text_mask = prepare_page(img, source_lang, progress)
@@ -81,7 +86,7 @@ def run_pipeline(img: np.ndarray, source_lang: str, target_lang: str,
             progress("waiting")  # for the previous page's translation
             previous = context.wait_for_previous()
         regions = translate_page(img, regions, source_lang, target_lang, style, glossary,
-                                 previous, progress)
+                                 previous, progress, quality, usage)
         if context:
             context.publish([{"source": r.source_text, "text": r.translated_text} for r in regions])
             published = True

@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import config
+from . import config, pricing
 from .pipeline import PageContext, TextRegion, rerender, run_pipeline
 from .pipeline.enhance import enhance as enhance_scan
 
@@ -62,6 +62,8 @@ class Job:
     glossary: str = ""
     font_style: str = "manga"
     enhance: bool = False           # clean up a low-quality scan first (pipeline/enhance.py)
+    quality: str = "economy"        # economy (Haiku) | best (Sonnet), see pricing.py
+    usage: dict = field(default_factory=dict)  # Claude tokens + estimated cost for this page
     owner: int = 0
     created_at: float = 0.0
     batch_id: str = ""
@@ -113,9 +115,10 @@ class _Chain:
 
 def _create_job(data: bytes, filename: str, owner: int, source_lang: str, target_lang: str,
                 style: str, glossary: str, batch_id: str = "", page_index: int = 0,
-                font_style: str = "manga", enhance: bool = False) -> Job:
+                font_style: str = "manga", enhance: bool = False, quality: str = "economy") -> Job:
     job = Job(id=_new_id(), filename=filename, source_lang=source_lang, target_lang=target_lang,
-              style=style, glossary=glossary, font_style=font_style, enhance=enhance, owner=owner,
+              style=style, glossary=glossary, font_style=font_style, enhance=enhance,
+              quality=quality, owner=owner,
               created_at=time.time(), batch_id=batch_id, page_index=page_index)
     job.dir.mkdir(parents=True, exist_ok=True)
     # Normalize every upload (PNG/JPG/WebP/HEIC/...) to PNG
@@ -152,9 +155,14 @@ def _run(job: Job, context: PageContext | None = None):
         if job.enhance:
             progress("enhancing")
             img = enhance_scan(img)
-        regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress,
-                                                style=job.style, glossary=job.glossary,
-                                                context=context, font_style=job.font_style)
+        usage = pricing.empty_usage()
+        try:
+            regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress,
+                                                    style=job.style, glossary=job.glossary,
+                                                    context=context, font_style=job.font_style,
+                                                    quality=job.quality, usage=usage)
+        finally:
+            job.usage = usage  # record what Claude cost even if a later step failed
         if job.id in _deleted:
             return
         Image.fromarray(cleaned).save(job.dir / "cleaned.png")
@@ -208,6 +216,7 @@ class Batch:
     style: str = "standard"
     font_style: str = "manga"
     enhance: bool = False
+    quality: str = "economy"
     page_ids: list[str] = field(default_factory=list)
 
     @property
@@ -228,13 +237,14 @@ class Batch:
 
 def create_batch(pages, name: str, owner: int, source_lang: str, target_lang: str,
                  style: str = "standard", glossary: str = "", font_style: str = "manga",
-                 enhance: bool = False) -> Batch:
+                 enhance: bool = False, quality: str = "economy") -> Batch:
     """pages: list of archives.Page, in reading order."""
     batch = Batch(id=_new_id(), name=name, owner=owner, created_at=time.time(),
                   source_lang=source_lang, target_lang=target_lang, style=style,
-                  font_style=font_style, enhance=enhance)
+                  font_style=font_style, enhance=enhance, quality=quality)
     page_jobs = [_create_job(page.data, page.name, owner, source_lang, target_lang, style, glossary,
-                             batch_id=batch.id, page_index=i, font_style=font_style, enhance=enhance)
+                             batch_id=batch.id, page_index=i, font_style=font_style, enhance=enhance,
+                             quality=quality)
                  for i, page in enumerate(pages)]
     batch.page_ids = [j.id for j in page_jobs]
     batch.save()
