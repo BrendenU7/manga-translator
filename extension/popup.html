@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="">
+    <div>
+      <b>Manga Translator</b>
+      <span id="conn" class="muted">Checking…</span>
+    </div>
+  </header>
+
+  <section id="setup" hidden>
+    <label>App address <input id="server" placeholder="http://localhost:8000"></label>
+    <label>Extension key <input id="api-key" type="password" placeholder="mtk_…"></label>
+    <button id="save">Save &amp; connect</button>
+    <p class="muted">Create a key on your app's <a id="dash-link" href="#" target="_blank">Dashboard</a>.</p>
+  </section>
+
+  <section id="main" hidden>
+    <label>Translate to <select id="target"></select></label>
+    <label>Font <select id="font-style"></select></label>
+    <label class="row">
+      <span>Translate buttons on <b id="site"></b></span>
+      <input id="site-toggle" type="checkbox" role="switch">
+    </label>
+    <button id="translate-all">Translate all images on this page</button>
+    <p id="result" class="muted"></p>
+    <p class="muted small">Tip: right-click any image → “Translate this image”.</p>
+    <footer>
+      <a id="open-dash" href="#" target="_blank">Dashboard</a>
+      <button id="edit-setup" class="link">Settings</button>
+    </footer>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

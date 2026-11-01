@@ -133,3 +133,26 @@ def test_old_unowned_batches_use_file_age(app, tmp_path):
     os.utime(legacy.path, (old, old))
     jobs._batches.clear()
     assert jobs.cleanup_expired() == 1
+
+
+def test_extension_api_key(app):
+    from fastapi.testclient import TestClient
+    alice = new_client(app, "alice")
+    key = alice.post("/api/auth/api-key").json()["key"]
+    assert key.startswith("mtk_")
+
+    ext = TestClient(app)  # no cookies, like the extension
+    headers = {"Authorization": f"Bearer {key}"}
+    assert ext.get("/api/auth/me", headers=headers).json()["username"] == "alice"
+    r = ext.post("/api/batches", headers=headers, files=[("files", ("p.png", png_bytes(), "image/png"))])
+    assert r.status_code == 200
+    assert len(alice.get("/api/batches").json()["batches"]) == 1  # shows on Alice's dashboard
+
+    # An API key can't mint more keys, only the logged-in website can
+    assert ext.post("/api/auth/api-key", headers=headers).status_code == 401
+
+    # A new key replaces the old one; revoking kills it
+    key2 = alice.post("/api/auth/api-key").json()["key"]
+    assert ext.get("/api/auth/me", headers=headers).status_code == 401
+    alice.delete("/api/auth/api-key")
+    assert ext.get("/api/auth/me", headers={"Authorization": f"Bearer {key2}"}).status_code == 401

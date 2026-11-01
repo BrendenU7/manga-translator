@@ -77,7 +77,28 @@ def logout(request: Request, response: Response):
 
 @app.get("/api/auth/me")
 def me(user: User = Depends(current_user)):
-    return {"username": user.username, "retention_days": config.RETENTION_DAYS}
+    return {"username": user.username, "retention_days": config.RETENTION_DAYS,
+            "api_key_created_at": auth.api_key_created_at(user)}
+
+
+def _cookie_user(request: Request) -> User:
+    """Logged in via the website (not an API key): only the website can manage keys."""
+    user = auth.user_for_token(request.cookies.get(auth.COOKIE_NAME))
+    if user is None:
+        raise HTTPException(401, "Please log in")
+    return user
+
+
+@app.post("/api/auth/api-key")
+def new_api_key(user: User = Depends(_cookie_user)):
+    """Create the browser-extension key (replaces the old one). Shown only this once."""
+    return {"key": auth.create_api_key(user)}
+
+
+@app.delete("/api/auth/api-key")
+def delete_api_key(user: User = Depends(_cookie_user)):
+    auth.revoke_api_key(user)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- helpers
@@ -230,24 +251,26 @@ async def create_batch(files: list[UploadFile] = File(...),
                        glossary: str = Form(""),
                        font_style: str = Form("manga"),
                        enhance: bool = Form(False),
+                       name: str = Form(""),
                        user: User = Depends(current_user)):
     """Upload several images and/or ZIP, CBZ, EPUB, RAR or PDF files; every page becomes a job."""
     _check_options(source_lang, target_lang, style, font_style)
     uploads, total = [], 0
     for f in files:
-        name = f.filename or "upload"
-        if archives.ext_of(name) not in archives.SUPPORTED_EXTS:
-            raise HTTPException(400, f"Unsupported file: {name}")
+        filename = f.filename or "upload"
+        if archives.ext_of(filename) not in archives.SUPPORTED_EXTS:
+            raise HTTPException(400, f"Unsupported file: {filename}")
         data = await f.read()
         total += len(data)
         if total > config.MAX_BATCH_UPLOAD_MB * 1024 * 1024:
             raise HTTPException(413, f"Upload larger than {config.MAX_BATCH_UPLOAD_MB} MB")
-        uploads.append((name, data))
+        uploads.append((filename, data))
     try:
         pages = archives.expand_uploads(uploads)
     except archives.ArchiveError as e:
         raise HTTPException(400, str(e))
-    name = uploads[0][0] if len(uploads) == 1 else f"{len(uploads)} files"
+    # Optional display name (the extension sends the page title); otherwise use the file names
+    name = name.strip()[:120] or (uploads[0][0] if len(uploads) == 1 else f"{len(uploads)} files")
     batch = jobs.create_batch(pages, name, user.id, source_lang, target_lang, style, glossary[:2000],
                               font_style, enhance)
     return _batch_json(batch)

@@ -56,6 +56,11 @@ cookies, SQLite in `data/app.db`). Every upload belongs to its user; other users
 The Dashboard lists your recent translations (open, download ZIP, delete), and everything
 is deleted automatically after `RETENTION_DAYS` (default 10) by a background cleanup.
 
+**Browser extension** (`extension/`, see its README): translates manga images in place on
+the sites you read: hover button per image, "Translate all" (one batch, with page
+context), and a right-click menu. It talks to your app with a personal key created on the
+Dashboard (`Authorization: Bearer mtk_…`; one per user, revocable).
+
 **Dark mode:** toggle in the header; follows the system setting until you choose.
 
 Supported uploads: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC · ZIP, CBZ, EPUB · RAR, CBR
@@ -101,7 +106,8 @@ pytest                 # includes an end-to-end run on the sample page
 | Method | Path | |
 |---|---|---|
 | `POST` | `/api/auth/signup`, `/api/auth/login`, `/api/auth/logout` | JSON `{username, password}`; sets the session cookie |
-| `GET` | `/api/auth/me` | Current user (401 if logged out). All endpoints below need a login. |
+| `GET` | `/api/auth/me` | Current user (401 if logged out). All endpoints below need a login (cookie) or an extension key (`Authorization: Bearer`). |
+| `POST` / `DELETE` | `/api/auth/api-key` | Create (replace) / revoke your extension key. Website login only. |
 | `GET` | `/api/config` | Supported languages, translator mode |
 | `POST` | `/api/jobs` | multipart: `file`, `source_lang`, `target_lang`, `style`, `glossary` → job |
 | `POST` | `/api/batches` | multipart: `files` (repeat), same options → batch of page jobs |
@@ -126,7 +132,7 @@ pytest                 # includes an end-to-end run on the sample page
 - [x] Before/after slider, reader, font picker
 - [x] Webtoon long-strip support
 - [x] Scan cleanup + LaMa inpainting
-- [ ] Browser extension
+- [x] Browser extension (Chrome / Edge / Firefox)
 - [ ] Optional cloud storage (Cloudflare R2 / Backblaze B2)
 - [ ] Font style choices
 - [ ] Drag/resize text boxes in the editor

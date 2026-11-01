@@ -15,6 +15,8 @@ Portfolio project; keep code readable and well commented over clever.
   `jobs.cleanup_expired()` deletes anything older than RETENTION_DAYS (background thread).
 - `frontend/common.js`: shared header (theme toggle, login redirect, logout); pages:
   `index.html` (translate, `?batch=<id>` reopens), `dashboard.html`, `login.html`
+- `extension/`: MV3 browser extension (background.js uploads batches with `Bearer mtk_…`,
+  content.js swaps images in place, popup.js settings). API keys live in auth.py `api_keys`.
 - `backend/app/archives.py`: uploads (images, ZIP/CBZ/EPUB, RAR/CBR, PDF) -> ordered pages
 - `backend/app/pipeline/`: one module per step; `__init__.run_pipeline` wires them together
   - `ctd.py`: comic-text-detector ONNX model (downloads to `models/` on first use); gives boxes + text mask
@@ -49,5 +51,5 @@ Portfolio project; keep code readable and well commented over clever.
 - Don't commit copyrighted manga pages; use `samples/make_sample.py` for fixtures.
 
 ## Next up (see README roadmap)
-Approved phases (1-5 done): (6) browser extension. Offered, not yet approved: encryption at rest,
+All approved phases (1-6) are done. Offered, not yet approved: encryption at rest,
 optional R2/B2 storage.

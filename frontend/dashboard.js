@@ -47,7 +47,43 @@ function render(batches) {
     card.querySelector(".danger").addEventListener("click", async () => {
       if (!confirmDelete(card)) return;
       await fetch(`/api/batches/${b.id}`, { method: "DELETE" });
-      loadDashboard();
+      // ------------------------------------------------------------------ extension key
+
+async function renderKeyStatus() {
+  const me = await (await fetch("/api/auth/me")).json();
+  const has = !!me.api_key_created_at;
+  $("#key-status").textContent = has
+    ? `You have an active key, created ${fmtDate(me.api_key_created_at)}. Creating a new one replaces it.`
+    : "No key yet.";
+  $("#key-new").textContent = has ? "Replace key" : "Create extension key";
+  $("#key-revoke").hidden = !has;
+}
+
+$("#key-new").addEventListener("click", async () => {
+  const res = await fetch("/api/auth/api-key", { method: "POST" });
+  if (!res.ok) return;
+  const { key } = await res.json();
+  $("#key-value").value = key;
+  $("#key-row").hidden = false;
+  $("#key-warning").hidden = false;
+  renderKeyStatus();
+});
+
+$("#key-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#key-value").value); } catch (e) { $("#key-value").select(); }
+  $("#key-copy").textContent = "Copied";
+  setTimeout(() => { $("#key-copy").textContent = "Copy"; }, 1500);
+});
+
+$("#key-revoke").addEventListener("click", async () => {
+  await fetch("/api/auth/api-key", { method: "DELETE" });
+  $("#key-row").hidden = true;
+  $("#key-warning").hidden = true;
+  renderKeyStatus();
+});
+
+currentUser.then(renderKeyStatus);
+loadDashboard();
     });
     grid.appendChild(card);
   }
@@ -63,4 +99,40 @@ function confirmDelete(card) {
   return false;
 }
 
+// ------------------------------------------------------------------ extension key
+
+async function renderKeyStatus() {
+  const me = await (await fetch("/api/auth/me")).json();
+  const has = !!me.api_key_created_at;
+  $("#key-status").textContent = has
+    ? `You have an active key, created ${fmtDate(me.api_key_created_at)}. Creating a new one replaces it.`
+    : "No key yet.";
+  $("#key-new").textContent = has ? "Replace key" : "Create extension key";
+  $("#key-revoke").hidden = !has;
+}
+
+$("#key-new").addEventListener("click", async () => {
+  const res = await fetch("/api/auth/api-key", { method: "POST" });
+  if (!res.ok) return;
+  const { key } = await res.json();
+  $("#key-value").value = key;
+  $("#key-row").hidden = false;
+  $("#key-warning").hidden = false;
+  renderKeyStatus();
+});
+
+$("#key-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#key-value").value); } catch (e) { $("#key-value").select(); }
+  $("#key-copy").textContent = "Copied";
+  setTimeout(() => { $("#key-copy").textContent = "Copy"; }, 1500);
+});
+
+$("#key-revoke").addEventListener("click", async () => {
+  await fetch("/api/auth/api-key", { method: "DELETE" });
+  $("#key-row").hidden = true;
+  $("#key-warning").hidden = true;
+  renderKeyStatus();
+});
+
+currentUser.then(renderKeyStatus);
 loadDashboard();

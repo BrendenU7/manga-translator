@@ -141,3 +141,9 @@ def test_scan_cleanup_option_is_saved(client):
     batch = client.post("/api/batches", files=files, data={"enhance": "true"}).json()
     page = batch["pages"][0]["id"]
     assert client.get(f"/api/jobs/{page}").json()["enhance"] is True
+
+
+def test_batch_can_be_named(client):
+    files = [("files", ("p1.png", png_bytes(), "image/png"))]
+    assert client.post("/api/batches", files=files, data={"name": "Chapter 22"}).json()["name"] == "Chapter 22"
+    assert client.post("/api/batches", files=files).json()["name"] == "p1.png"

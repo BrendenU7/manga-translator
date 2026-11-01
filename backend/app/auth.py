@@ -1,8 +1,10 @@
-"""User accounts and login sessions (SQLite, standard library only).
+"""User accounts, login sessions and API keys (SQLite, standard library only).
 
 - Passwords are hashed with scrypt and a random per-user salt; we never store the password.
 - A login creates a random session token. The browser keeps it in an httponly cookie;
   the database only keeps a SHA-256 hash of it, so a leaked database can't be used to log in.
+- An API key (one per user, for the browser extension) works the same way but is sent as
+  `Authorization: Bearer <key>`. It's shown once when created and can be revoked.
 """
 import hashlib
 import hmac
@@ -41,6 +43,10 @@ def _db() -> sqlite3.Connection:
         token_hash TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id),
         expires_at REAL NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS api_keys (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id),
+        key_hash TEXT UNIQUE NOT NULL,
+        created_at REAL NOT NULL)""")
     return conn
 
 
@@ -122,10 +128,51 @@ def purge_expired_sessions():
         conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (time.time(),))
 
 
+# ------------------------------------------------------------------ API keys (extension)
+
+API_KEY_PREFIX = "mtk_"
+
+
+def create_api_key(user: User) -> str:
+    """New API key for the user, replacing any previous one. Returned once, never stored."""
+    key = API_KEY_PREFIX + secrets.token_urlsafe(32)
+    with closing(_db()) as conn, conn:
+        conn.execute("INSERT OR REPLACE INTO api_keys (user_id, key_hash, created_at) VALUES (?, ?, ?)",
+                     (user.id, _token_hash(key), time.time()))
+    return key
+
+
+def revoke_api_key(user: User):
+    with closing(_db()) as conn, conn:
+        conn.execute("DELETE FROM api_keys WHERE user_id = ?", (user.id,))
+
+
+def api_key_created_at(user: User) -> float | None:
+    with closing(_db()) as conn:
+        row = conn.execute("SELECT created_at FROM api_keys WHERE user_id = ?", (user.id,)).fetchone()
+    return row[0] if row else None
+
+
+def user_for_api_key(key: str) -> User | None:
+    with closing(_db()) as conn:
+        row = conn.execute("SELECT u.id, u.username FROM api_keys k JOIN users u ON u.id = k.user_id "
+                           "WHERE k.key_hash = ?", (_token_hash(key),)).fetchone()
+    return User(row[0], row[1]) if row else None
+
+
 # ------------------------------------------------------------------ FastAPI dependency
 
 def current_user(request: Request) -> User:
-    """Use as `user: User = Depends(current_user)` on routes that need a login."""
+    """Use as `user: User = Depends(current_user)` on routes that need a login.
+
+    Accepts the website's session cookie, or an API key in the Authorization header.
+    """
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        user = user_for_api_key(auth_header[7:].strip())
+        if user is None:
+            raise HTTPException(401, "Invalid or revoked extension key")
+        return user
     user = user_for_token(request.cookies.get(COOKIE_NAME))
     if user is None:
         raise HTTPException(401, "Please log in")

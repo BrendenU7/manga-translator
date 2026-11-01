@@ -40,6 +40,24 @@
     <p id="dash-empty" class="card note" hidden>
       Nothing here yet. Translations you make show up here for 10 days.
     </p>
+
+    <section id="extension" class="card ext-card">
+      <h2>Browser extension</h2>
+      <p class="note">Translate manga images right on the sites you read. The extension sends images to
+        this app (running on your PC) using a personal key. Install it from the <code>extension/</code>
+        folder of the project (see its README), then paste your key into the extension popup.</p>
+      <p id="key-status" class="note"></p>
+      <div class="key-row" id="key-row" hidden>
+        <input id="key-value" readonly>
+        <button id="key-copy" type="button">Copy</button>
+      </div>
+      <p id="key-warning" class="note" hidden>Copy it now: it won't be shown again. Anyone with this key can translate
+        as you, so keep it private.</p>
+      <div class="dash-actions">
+        <button id="key-new" type="button">Create extension key</button>
+        <button id="key-revoke" class="link-btn danger" type="button" hidden>Revoke key</button>
+      </div>
+    </section>
   </main>
 
   <script src="common.js"></script>

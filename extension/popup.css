@@ -1,0 +1,21 @@
+:root { color-scheme: light dark; --accent: #d6336c; }
+body { width: 300px; margin: 0; padding: 14px; font: 14px/1.4 system-ui, sans-serif; }
+header { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+header img { width: 36px; height: 36px; }
+header b { display: block; }
+section { display: grid; gap: 10px; }
+[hidden] { display: none !important; }
+label { display: grid; gap: 4px; font-weight: 600; font-size: 13px; }
+label.row { display: flex; justify-content: space-between; align-items: center; font-weight: 500; }
+input, select { font: inherit; padding: 6px 8px; border: 1px solid #8884; border-radius: 6px; }
+input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+button { font: inherit; font-weight: 600; padding: 8px 12px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer; }
+button:disabled { opacity: .5; }
+button.link { background: none; color: inherit; padding: 0; font-weight: 500; text-decoration: underline; }
+.muted { color: #888; margin: 0; font-size: 12px; }
+.muted.ok { color: #2b8a3e; }
+.muted.bad { color: #e03131; }
+.small { font-size: 11px; }
+footer { display: flex; justify-content: space-between; font-size: 12px; }
+a { color: var(--accent); }
