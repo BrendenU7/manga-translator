@@ -30,6 +30,7 @@ from PIL import Image
 
 from . import config
 from .pipeline import PageContext, TextRegion, rerender, run_pipeline
+from .pipeline.enhance import enhance as enhance_scan
 
 log = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=config.WORKERS, thread_name_prefix="page")
@@ -60,12 +61,13 @@ class Job:
     style: str = "standard"
     glossary: str = ""
     font_style: str = "manga"
+    enhance: bool = False           # clean up a low-quality scan first (pipeline/enhance.py)
     owner: int = 0
     created_at: float = 0.0
     batch_id: str = ""
     page_index: int = 0
     status: str = "queued"          # queued | running | done | error
-    stage: str = "queued"           # detecting | reading | waiting | translating | cleaning | typesetting
+    stage: str = "queued"           # enhancing | detecting | reading | waiting | translating | cleaning | typesetting
     error: str = ""
     regions: list[dict] = field(default_factory=list)
 
@@ -111,9 +113,9 @@ class _Chain:
 
 def _create_job(data: bytes, filename: str, owner: int, source_lang: str, target_lang: str,
                 style: str, glossary: str, batch_id: str = "", page_index: int = 0,
-                font_style: str = "manga") -> Job:
+                font_style: str = "manga", enhance: bool = False) -> Job:
     job = Job(id=_new_id(), filename=filename, source_lang=source_lang, target_lang=target_lang,
-              style=style, glossary=glossary, font_style=font_style, owner=owner,
+              style=style, glossary=glossary, font_style=font_style, enhance=enhance, owner=owner,
               created_at=time.time(), batch_id=batch_id, page_index=page_index)
     job.dir.mkdir(parents=True, exist_ok=True)
     # Normalize every upload (PNG/JPG/WebP/HEIC/...) to PNG
@@ -147,6 +149,9 @@ def _run(job: Job, context: PageContext | None = None):
             return
         job.status = "running"
         img = _load_rgb(job.dir / "original.png")
+        if job.enhance:
+            progress("enhancing")
+            img = enhance_scan(img)
         regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress,
                                                 style=job.style, glossary=job.glossary,
                                                 context=context, font_style=job.font_style)
@@ -202,6 +207,7 @@ class Batch:
     target_lang: str = "en"
     style: str = "standard"
     font_style: str = "manga"
+    enhance: bool = False
     page_ids: list[str] = field(default_factory=list)
 
     @property
@@ -221,13 +227,14 @@ class Batch:
 
 
 def create_batch(pages, name: str, owner: int, source_lang: str, target_lang: str,
-                 style: str = "standard", glossary: str = "", font_style: str = "manga") -> Batch:
+                 style: str = "standard", glossary: str = "", font_style: str = "manga",
+                 enhance: bool = False) -> Batch:
     """pages: list of archives.Page, in reading order."""
     batch = Batch(id=_new_id(), name=name, owner=owner, created_at=time.time(),
                   source_lang=source_lang, target_lang=target_lang, style=style,
-                  font_style=font_style)
+                  font_style=font_style, enhance=enhance)
     page_jobs = [_create_job(page.data, page.name, owner, source_lang, target_lang, style, glossary,
-                             batch_id=batch.id, page_index=i, font_style=font_style)
+                             batch_id=batch.id, page_index=i, font_style=font_style, enhance=enhance)
                  for i, page in enumerate(pages)]
     batch.page_ids = [j.id for j in page_jobs]
     batch.save()

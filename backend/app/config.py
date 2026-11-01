@@ -40,6 +40,11 @@ DETECTOR = os.getenv("DETECTOR", "ctd")
 CTD_MODEL_PATH = Path(os.getenv("CTD_MODEL_PATH", ROOT / "models" / "comictextdetector.pt.onnx"))
 CTD_THREADS = int(os.getenv("CTD_THREADS", "0"))  # 0 = use all CPU cores
 
+# Rebuilding artwork behind text that isn't in a white bubble:
+# "lama" = manga-tuned LaMa model (downloads ~200 MB once), "opencv" = fast but smeary
+INPAINTER = os.getenv("INPAINTER", "lama")
+LAMA_MODEL_PATH = Path(os.getenv("LAMA_MODEL_PATH", ROOT / "models" / "anime-manga-big-lama.pt"))
+
 # Send Claude an image of each bubble so it can read the text itself, not just the OCR guess
 CLAUDE_VISION = os.getenv("CLAUDE_VISION", "1") == "1"
 

@@ -210,3 +210,6 @@ a[aria-disabled="true"] { opacity: .4; pointer-events: none; }
 #reader.scroll #reader-img { display: block; margin: 0 auto; max-height: none; width: min(800px, 100vw); }
 #reader.scroll .reader-zone { display: none; }  /* scroll to read; arrows/buttons still flip */
 #reader.scroll .reader-bar { position: fixed; }
+
+label.check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 600; cursor: pointer; }
+label.check input { width: 16px; height: 16px; accent-color: var(--accent); }

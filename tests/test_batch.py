@@ -134,3 +134,10 @@ def test_font_style_is_saved_and_can_be_changed(client):
     assert res.status_code == 200 and res.json()["font_style"] == "handwritten"
     assert client.put(f"/api/jobs/{page}/translations", json={"font_style": "wingdings"}).status_code == 400
     assert client.post("/api/batches", files=files, data={"font_style": "nope"}).status_code == 400
+
+
+def test_scan_cleanup_option_is_saved(client):
+    files = [("files", ("p1.png", png_bytes(), "image/png"))]
+    batch = client.post("/api/batches", files=files, data={"enhance": "true"}).json()
+    page = batch["pages"][0]["id"]
+    assert client.get(f"/api/jobs/{page}").json()["enhance"] is True

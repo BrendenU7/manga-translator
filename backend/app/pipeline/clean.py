@@ -5,12 +5,13 @@ masked lettering pixels inside each region. Otherwise we guess the strokes from
 pixel brightness inside each line box.
 
 - Text inside a white speech bubble: paint over it with the bubble's color.
-- Text over artwork: build a mask of just the text strokes and inpaint with OpenCV,
-  which fills the gap from surrounding pixels. (LaMa would do better; see README.)
+- Text over artwork: build a mask of just the text strokes and inpaint it, rebuilding the
+  drawing behind it (LaMa model, see inpaint.py).
 """
 import cv2
 import numpy as np
 
+from .inpaint import inpaint
 from .models import Box, TextRegion
 
 
@@ -88,7 +89,7 @@ def clean_regions(img: np.ndarray, regions: list[TextRegion],
                 inpaint_mask[box[1]:box[3], box[0]:box[2]] |= strokes
 
     if inpaint_mask.any():
-        out = cv2.inpaint(out, inpaint_mask, 5, cv2.INPAINT_TELEA)
+        out = inpaint(out, inpaint_mask)  # LaMa (or OpenCV fallback), see inpaint.py
     return out
 
 

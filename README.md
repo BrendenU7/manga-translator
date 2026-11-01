@@ -17,7 +17,7 @@ upload ─▶ detect ─▶ OCR ─▶ translate ─▶ clean ─▶ typeset ─
 | Detect | `pipeline/detect.py`, `pipeline/ctd.py` | [comic-text-detector](https://github.com/dmMaze/comic-text-detector), a model trained on manga pages, run with ONNX Runtime. It finds whole text blocks (vertical Japanese, hand-lettering next to screentone) and outputs a per-pixel text mask. Regions are sorted in manga reading order (right-to-left). EasyOCR's generic detector is the fallback. |
 | OCR | `pipeline/ocr.py` | [manga-ocr](https://github.com/kha-white/manga-ocr) for Japanese if installed; otherwise EasyOCR. Vertical columns are cut into characters and laid out horizontally so EasyOCR can read them. |
 | Translate | `pipeline/translate.py` | One Claude request per page. Claude gets the full page plus an image of every bubble with the OCR guess, reads the text itself (OCR on manga lettering is unreliable), and returns its reading plus the translation as JSON. Supports translation styles (standard / keep honorifics / faithful) and a glossary for names and terms. |
-| Clean | `pipeline/clean.py` | Erases the masked lettering pixels. On white backgrounds they're repainted with the bubble color; over artwork they're filled in with OpenCV inpainting. |
+| Clean | `pipeline/clean.py`, `pipeline/inpaint.py` | Erases the masked lettering pixels. On white backgrounds they're repainted with the bubble color; over artwork the drawing is rebuilt with [LaMa](https://github.com/advimman/lama) (a manga/anime fine-tune, ~200 MB, downloaded on first use), run on small crops around the text. `INPAINTER=opencv` switches to OpenCV's instant but smeary inpainting. |
 | Typeset | `pipeline/typeset.py` | Flood-fills the bubble to find its real size (or widens the text box when there's no closed bubble), binary-searches the largest font that fits after word wrapping, and draws centered ALL-CAPS text in Comic Neue (with an outline over artwork). |
 
 The backend is FastAPI. Each page is a background job, and the frontend polls for
@@ -39,6 +39,11 @@ Chinese/Japanese wrap per character, Arabic/Persian are shaped right-to-left.
 erasing overlap. Translation is chained in page order: each page waits for the previous
 one and gets the last two pages' dialogue as context, so names, terms and each
 character's voice stay consistent across a chapter.
+
+**Scan cleanup** (optional checkbox, `pipeline/enhance.py`): for low-quality raws.
+Upscales small pages up to 2x, removes noise, evens out uneven lighting (estimated from
+the paper only, so the art's shading survives), and sharpens. The cleaned page is what
+gets translated.
 
 **Webtoons / long strips:** images taller than 2.5× their width are detected slice by
 slice (cut in the blank gutters between panels, or with overlap where there are none),
@@ -120,7 +125,7 @@ pytest                 # includes an end-to-end run on the sample page
 - [x] Context across pages + parallel processing
 - [x] Before/after slider, reader, font picker
 - [x] Webtoon long-strip support
-- [ ] Scan cleanup + LaMa inpainting
+- [x] Scan cleanup + LaMa inpainting
 - [ ] Browser extension
 - [ ] Optional cloud storage (Cloudflare R2 / Backblaze B2)
 - [ ] Font style choices
@@ -131,5 +136,4 @@ pytest                 # includes an end-to-end run on the sample page
 
 - Without an API key, translations are placeholders and the source text is EasyOCR's
   guess, which is weak on manga lettering. With a key, Claude reads the bubble images.
-- OpenCV inpainting smears textured backgrounds. LaMa is the fix.
 - Only use pages you have rights to in public demos.

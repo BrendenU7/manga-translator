@@ -165,6 +165,7 @@ async def create_job(file: UploadFile = File(...),
                      style: str = Form("standard"),
                      glossary: str = Form(""),
                      font_style: str = Form("manga"),
+                     enhance: bool = Form(False),
                      user: User = Depends(current_user)):
     """Translate one image. (Recorded as a one-page batch, so it shows on the dashboard.)"""
     # Browsers often send HEIC as application/octet-stream, so also accept by extension
@@ -177,7 +178,7 @@ async def create_job(file: UploadFile = File(...),
         raise HTTPException(413, f"File larger than {config.MAX_UPLOAD_MB} MB")
     name = file.filename or "page.png"
     batch = jobs.create_batch([archives.Page(name, data)], name, user.id,
-                              source_lang, target_lang, style, glossary[:2000], font_style)
+                              source_lang, target_lang, style, glossary[:2000], font_style, enhance)
     data = _job_json(jobs.get_job(batch.page_ids[0]))
     data["batch_id"] = batch.id
     return data
@@ -228,6 +229,7 @@ async def create_batch(files: list[UploadFile] = File(...),
                        style: str = Form("standard"),
                        glossary: str = Form(""),
                        font_style: str = Form("manga"),
+                       enhance: bool = Form(False),
                        user: User = Depends(current_user)):
     """Upload several images and/or ZIP, CBZ, EPUB, RAR or PDF files; every page becomes a job."""
     _check_options(source_lang, target_lang, style, font_style)
@@ -247,7 +249,7 @@ async def create_batch(files: list[UploadFile] = File(...),
         raise HTTPException(400, str(e))
     name = uploads[0][0] if len(uploads) == 1 else f"{len(uploads)} files"
     batch = jobs.create_batch(pages, name, user.id, source_lang, target_lang, style, glossary[:2000],
-                              font_style)
+                              font_style, enhance)
     return _batch_json(batch)
 
 

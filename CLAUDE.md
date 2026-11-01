@@ -19,6 +19,8 @@ Portfolio project; keep code readable and well commented over clever.
 - `backend/app/pipeline/`: one module per step; `__init__.run_pipeline` wires them together
   - `ctd.py`: comic-text-detector ONNX model (downloads to `models/` on first use); gives boxes + text mask
   - `translate.py`: one Claude call per page; sends page + bubble crops (vision), styles, glossary
+  - `inpaint.py`: LaMa (TorchScript, models/anime-manga-big-lama.pt) on crops; OpenCV fallback
+  - `enhance.py`: optional scan cleanup (upscale, denoise, paper-only lighting fix), run in jobs._run
   - `fonts.py`: picks a font whose cmap covers the text (any script); `typeset.py` wraps CJK per
     character and shapes Arabic/Persian (RTL)
 - Language codes live in `config.py` (SOURCE_LANGS incl. "auto", TARGET_LANGS, LANG_NAMES_EN,
@@ -47,4 +49,5 @@ Portfolio project; keep code readable and well commented over clever.
 - Don't commit copyrighted manga pages; use `samples/make_sample.py` for fixtures.
 
 ## Next up (see README roadmap)
-Approved phases (1-4 done): (5) scan cleanup + LaMa, (6) browser extension.
+Approved phases (1-5 done): (6) browser extension. Offered, not yet approved: encryption at rest,
+optional R2/B2 storage.

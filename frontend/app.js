@@ -77,7 +77,7 @@ function renderFileList() {
         if (img.naturalHeight < LOW_RES_HEIGHT && img.naturalWidth < LOW_RES_HEIGHT) {
           card.classList.add("lowres");
           card.insertAdjacentHTML("beforeend",
-            `<span class="badge" title="${img.naturalWidth}×${img.naturalHeight}px: small pages give worse OCR and lettering">⚠ Low-res</span>`);
+            `<span class="badge" title="${img.naturalWidth}×${img.naturalHeight}px: small pages give worse OCR and lettering. Tip: tick 'Clean up low-quality scans'.">⚠ Low-res</span>`);
         }
       };
       img.src = URL.createObjectURL(f);  // HEIC won't decode in most browsers: the card keeps its label
@@ -111,6 +111,7 @@ $("#translate-btn").addEventListener("click", async () => {
   form.append("style", $("#style").value);
   form.append("glossary", $("#glossary").value);
   form.append("font_style", $("#font-style").value);
+  form.append("enhance", $("#enhance").checked ? "true" : "false");
 
   $("#translate-btn").disabled = true;
   $("#result-panel").hidden = true;
@@ -134,6 +135,7 @@ function resetBatchView() {
 function renderStages(stage) {
   // "waiting" = queued for translation behind the previous page; show it on the Translate step
   if (stage === "waiting") stage = "translating";
+  if (stage === "enhancing") stage = "detecting";  // scan cleanup happens before detection
   const idx = stage === "done" ? STAGES.length : STAGES.indexOf(stage);
   document.querySelectorAll("#stages li").forEach((li, i) => {
     li.className = i < idx ? "done" : i === idx ? "active" : "";
