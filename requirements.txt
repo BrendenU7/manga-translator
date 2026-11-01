@@ -1,0 +1,17 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+anthropic>=0.40
+easyocr>=1.7          # pulls in torch; text detection + fallback OCR
+opencv-python-headless>=4.9
+pillow>=10.0
+numpy>=1.26
+python-dotenv>=1.0
+
+# Optional but recommended for Japanese: much better on vertical manga text.
+# Downloads a ~450 MB model from Hugging Face on first use.
+# manga-ocr>=0.1.14
+
+# Dev
+pytest>=8.0
+httpx>=0.27

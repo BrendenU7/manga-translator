@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: loads OCR models (first run downloads ~100 MB)"]
+filterwarnings = ["ignore::UserWarning", "ignore::DeprecationWarning"]
