@@ -40,9 +40,9 @@ Portfolio project; keep code readable and well commented over clever.
 - Translation is one LLM call per page with JSON in/out; keep `translate_mock` working so the app runs without a key.
 - Config comes from env vars in `backend/app/config.py`; never hardcode keys.
 
-- Settings live in `config.py`: DETECTOR (ctd|easyocr), CLAUDE_VISION, UPPERCASE_TEXT, FONT_PATH.
+- Settings live in `config.py`: DETECTOR (ctd|easyocr), CLAUDE_VISION, UPPERCASE_TEXT, FONT_PATH,
+  FONT_STYLES (fonts per style in `pipeline/fonts.STYLE_FONTS`), WORKERS, RETENTION_DAYS.
 - Don't commit copyrighted manga pages; use `samples/make_sample.py` for fixtures.
 
 ## Next up (see README roadmap)
-Approved phases (1-2 done): (3) before/after slider,
-reader, font picker, (4) webtoon long strips, (5) scan cleanup + LaMa, (6) browser extension.
+Approved phases (1-3 done): (4) webtoon long strips, (5) scan cleanup + LaMa, (6) browser extension.

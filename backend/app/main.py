@@ -133,11 +133,13 @@ def _batch_json(batch: jobs.Batch) -> dict:
     }
 
 
-def _check_options(source_lang: str, target_lang: str, style: str):
+def _check_options(source_lang: str, target_lang: str, style: str, font_style: str = "manga"):
     if source_lang not in config.SOURCE_LANGS or target_lang not in config.TARGET_LANGS:
         raise HTTPException(400, "Unsupported language")
     if style not in STYLES:
         raise HTTPException(400, "Unsupported style")
+    if font_style not in config.FONT_STYLES:
+        raise HTTPException(400, "Unsupported font style")
 
 
 # ---------------------------------------------------------------- config
@@ -150,6 +152,7 @@ def get_config():
         "translator": config.TRANSLATOR,
         "styles": list(STYLES),
         "retention_days": config.RETENTION_DAYS,
+        "font_styles": config.FONT_STYLES,
     }
 
 
@@ -161,19 +164,20 @@ async def create_job(file: UploadFile = File(...),
                      target_lang: str = Form("en"),
                      style: str = Form("standard"),
                      glossary: str = Form(""),
+                     font_style: str = Form("manga"),
                      user: User = Depends(current_user)):
     """Translate one image. (Recorded as a one-page batch, so it shows on the dashboard.)"""
     # Browsers often send HEIC as application/octet-stream, so also accept by extension
     if (file.content_type not in ALLOWED_TYPES
             and archives.ext_of(file.filename or "") not in archives.IMAGE_EXTS):
         raise HTTPException(400, f"Unsupported file type: {file.content_type}")
-    _check_options(source_lang, target_lang, style)
+    _check_options(source_lang, target_lang, style, font_style)
     data = await file.read()
     if len(data) > config.MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(413, f"File larger than {config.MAX_UPLOAD_MB} MB")
     name = file.filename or "page.png"
     batch = jobs.create_batch([archives.Page(name, data)], name, user.id,
-                              source_lang, target_lang, style, glossary[:2000])
+                              source_lang, target_lang, style, glossary[:2000], font_style)
     data = _job_json(jobs.get_job(batch.page_ids[0]))
     data["batch_id"] = batch.id
     return data
@@ -200,7 +204,8 @@ class Edit(BaseModel):
 
 
 class EditRequest(BaseModel):
-    translations: list[Edit]
+    translations: list[Edit] = []
+    font_style: str | None = None
 
 
 @app.put("/api/jobs/{job_id}/translations")
@@ -208,7 +213,9 @@ def edit_translations(job_id: str, body: EditRequest, user: User = Depends(curre
     job = _job_or_404(job_id, user)
     if job.status != "done":
         raise HTTPException(409, "Page is not finished yet")
-    job = jobs.update_translations(job, {e.id: e.text for e in body.translations})
+    if body.font_style and body.font_style not in config.FONT_STYLES:
+        raise HTTPException(400, "Unsupported font style")
+    job = jobs.update_translations(job, {e.id: e.text for e in body.translations}, body.font_style)
     return _job_json(job)
 
 
@@ -220,9 +227,10 @@ async def create_batch(files: list[UploadFile] = File(...),
                        target_lang: str = Form("en"),
                        style: str = Form("standard"),
                        glossary: str = Form(""),
+                       font_style: str = Form("manga"),
                        user: User = Depends(current_user)):
     """Upload several images and/or ZIP, CBZ, EPUB, RAR or PDF files; every page becomes a job."""
-    _check_options(source_lang, target_lang, style)
+    _check_options(source_lang, target_lang, style, font_style)
     uploads, total = [], 0
     for f in files:
         name = f.filename or "upload"
@@ -238,7 +246,8 @@ async def create_batch(files: list[UploadFile] = File(...),
     except archives.ArchiveError as e:
         raise HTTPException(400, str(e))
     name = uploads[0][0] if len(uploads) == 1 else f"{len(uploads)} files"
-    batch = jobs.create_batch(pages, name, user.id, source_lang, target_lang, style, glossary[:2000])
+    batch = jobs.create_batch(pages, name, user.id, source_lang, target_lang, style, glossary[:2000],
+                              font_style)
     return _batch_json(batch)
 
 
@@ -268,5 +277,7 @@ def download_batch(batch_id: str, user: User = Depends(current_user)):
                     headers={"Content-Disposition": f'attachment; filename="{stem}_translated.zip"'})
 
 
+# Lettering fonts, so the font picker can preview them (all OFL licensed)
+app.mount("/fonts", StaticFiles(directory=config.ROOT / "fonts"), name="fonts")
 # Frontend (mounted last so /api routes take priority)
 app.mount("/", StaticFiles(directory=config.FRONTEND_DIR, html=True), name="frontend")

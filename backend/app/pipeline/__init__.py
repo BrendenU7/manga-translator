@@ -61,17 +61,17 @@ def translate_page(img, regions, source_lang, target_lang, style, glossary,
     return regions
 
 
-def finish_page(img, regions, text_mask, target_lang, progress: ProgressFn):
+def finish_page(img, regions, text_mask, target_lang, progress: ProgressFn, font_style: str = "manga"):
     progress("cleaning")
     cleaned = clean_regions(img, regions, text_mask)
     progress("typesetting")
-    return cleaned, typeset(cleaned, regions, target_lang)
+    return cleaned, typeset(cleaned, regions, target_lang, font_style)
 
 
 def run_pipeline(img: np.ndarray, source_lang: str, target_lang: str,
                  progress: ProgressFn = lambda s: None,
                  style: str = "standard", glossary: str = "",
-                 context: PageContext | None = None):
+                 context: PageContext | None = None, font_style: str = "manga"):
     """Translate one page. Returns (regions, cleaned_image, translated_image)."""
     published = False
     try:
@@ -85,13 +85,14 @@ def run_pipeline(img: np.ndarray, source_lang: str, target_lang: str,
         if context:
             context.publish([{"source": r.source_text, "text": r.translated_text} for r in regions])
             published = True
-        cleaned, result = finish_page(img, regions, text_mask, target_lang, progress)
+        cleaned, result = finish_page(img, regions, text_mask, target_lang, progress, font_style)
         return regions, cleaned, result
     finally:
         if context and not published:
             context.publish([])  # failed before translating: don't leave the next page waiting
 
 
-def rerender(cleaned: np.ndarray, regions: list[TextRegion], target_lang: str = "en") -> np.ndarray:
-    """Redraw text after the user edits translations (no OCR/LLM calls needed)."""
-    return typeset(cleaned, regions, target_lang)
+def rerender(cleaned: np.ndarray, regions: list[TextRegion], target_lang: str = "en",
+             font_style: str = "manga") -> np.ndarray:
+    """Redraw text after the user edits translations or changes font (no OCR/LLM calls)."""
+    return typeset(cleaned, regions, target_lang, font_style)

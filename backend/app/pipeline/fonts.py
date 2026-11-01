@@ -1,9 +1,9 @@
 """Pick a font that can actually draw the translated text.
 
-Comic Neue (bundled) only covers Latin letters. For Russian, Chinese, Thai, Arabic, etc.
-we walk a list of candidate fonts (comic-style first, then common system fonts on
-Windows, macOS and Linux) and use the first one whose character map covers every
-character in the text. Missing fonts are skipped, so the same list works on any OS.
+Each lettering style has its own bundled font (Comic Neue, Bangers, Patrick Hand), but those
+only cover Latin letters. For Russian, Chinese, Thai, Arabic, etc. we walk on to common
+system fonts on Windows, macOS and Linux and use the first one whose character map covers
+every character in the text. Missing fonts are skipped, so the same list works on any OS.
 """
 from functools import lru_cache
 from pathlib import Path
@@ -15,11 +15,17 @@ from .. import config
 _ROOT = config.ROOT
 _WIN = "C:/Windows/Fonts"
 
-CANDIDATES = [
-    # Comic-style first
-    str(_ROOT / "fonts" / "comic.ttf"),
-    str(_ROOT / "fonts" / "ComicNeue-Bold.ttf"),
-    f"{_WIN}/comicbd.ttf",                                   # Comic Sans Bold: Latin, Cyrillic, Greek
+# Fonts for each lettering style, tried first (bundled in fonts/, OFL licensed)
+STYLE_FONTS = {
+    "manga": [str(_ROOT / "fonts" / "comic.ttf"), str(_ROOT / "fonts" / "ComicNeue-Bold.ttf"),
+              f"{_WIN}/comicbd.ttf"],                      # Comic Sans Bold: Latin, Cyrillic, Greek
+    "action": [str(_ROOT / "fonts" / "Bangers-Regular.ttf")],
+    "handwritten": [str(_ROOT / "fonts" / "PatrickHand-Regular.ttf")],
+    "clean": [],
+}
+
+# System fonts, used for "clean" and for anything a style's font can't draw
+SYSTEM_FONTS = [
     # Latin / Cyrillic / Greek / Vietnamese / Arabic
     f"{_WIN}/arialbd.ttf",
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
@@ -46,7 +52,6 @@ CANDIDATES = [
     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
 ]
 
-
 @lru_cache(maxsize=None)
 def _charset(path: str) -> frozenset[int]:
     """All code points a font file can draw (first face of a .ttc collection)."""
@@ -63,8 +68,9 @@ def _charset(path: str) -> frozenset[int]:
         return frozenset()
 
 
-def _candidates() -> list[str]:
-    paths = ([config.FONT_PATH] if config.FONT_PATH else []) + CANDIDATES
+def _candidates(style: str = "manga") -> list[str]:
+    paths = (([config.FONT_PATH] if config.FONT_PATH else [])
+             + STYLE_FONTS.get(style, STYLE_FONTS["manga"]) + SYSTEM_FONTS)
     seen, out = set(), []
     for p in paths:
         if p and p not in seen and Path(p).exists():
@@ -73,11 +79,11 @@ def _candidates() -> list[str]:
     return out
 
 
-def font_path_for(text: str) -> str:
-    """First candidate font that covers every visible character in `text`."""
+def font_path_for(text: str, style: str = "manga") -> str:
+    """First font (the style's own, then system fonts) that covers every visible character."""
     needed = {ord(c) for c in text if not c.isspace()}
     best, best_missing = "", None
-    for path in _candidates():
+    for path in _candidates(style):
         missing = len(needed - _charset(path))
         if missing == 0:
             return path

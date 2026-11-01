@@ -59,6 +59,7 @@ class Job:
     target_lang: str
     style: str = "standard"
     glossary: str = ""
+    font_style: str = "manga"
     owner: int = 0
     created_at: float = 0.0
     batch_id: str = ""
@@ -109,10 +110,11 @@ class _Chain:
 
 
 def _create_job(data: bytes, filename: str, owner: int, source_lang: str, target_lang: str,
-                style: str, glossary: str, batch_id: str = "", page_index: int = 0) -> Job:
+                style: str, glossary: str, batch_id: str = "", page_index: int = 0,
+                font_style: str = "manga") -> Job:
     job = Job(id=_new_id(), filename=filename, source_lang=source_lang, target_lang=target_lang,
-              style=style, glossary=glossary, owner=owner, created_at=time.time(),
-              batch_id=batch_id, page_index=page_index)
+              style=style, glossary=glossary, font_style=font_style, owner=owner,
+              created_at=time.time(), batch_id=batch_id, page_index=page_index)
     job.dir.mkdir(parents=True, exist_ok=True)
     # Normalize every upload (PNG/JPG/WebP/HEIC/...) to PNG
     Image.open(io.BytesIO(data)).convert("RGB").save(job.dir / "original.png")
@@ -147,7 +149,7 @@ def _run(job: Job, context: PageContext | None = None):
         img = _load_rgb(job.dir / "original.png")
         regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress,
                                                 style=job.style, glossary=job.glossary,
-                                                context=context)
+                                                context=context, font_style=job.font_style)
         if job.id in _deleted:
             return
         Image.fromarray(cleaned).save(job.dir / "cleaned.png")
@@ -165,14 +167,16 @@ def _run(job: Job, context: PageContext | None = None):
     job.save()
 
 
-def update_translations(job: Job, edits: dict[int, str]) -> Job:
-    """Apply hand-edited translations and redraw the page."""
+def update_translations(job: Job, edits: dict[int, str], font_style: str | None = None) -> Job:
+    """Apply hand-edited translations (and optionally a new font style) and redraw the page."""
+    if font_style:
+        job.font_style = font_style
     regions = [TextRegion.from_dict(d) for d in job.regions]
     for r in regions:
         if r.id in edits:
             r.translated_text = edits[r.id]
     cleaned = _load_rgb(job.dir / "cleaned.png")
-    Image.fromarray(rerender(cleaned, regions, job.target_lang)).save(job.dir / "translated.png")
+    Image.fromarray(rerender(cleaned, regions, job.target_lang, job.font_style)).save(job.dir / "translated.png")
     job.regions = [r.to_dict() for r in regions]
     job.save()
     return job
@@ -197,6 +201,7 @@ class Batch:
     source_lang: str = "auto"
     target_lang: str = "en"
     style: str = "standard"
+    font_style: str = "manga"
     page_ids: list[str] = field(default_factory=list)
 
     @property
@@ -216,12 +221,13 @@ class Batch:
 
 
 def create_batch(pages, name: str, owner: int, source_lang: str, target_lang: str,
-                 style: str = "standard", glossary: str = "") -> Batch:
+                 style: str = "standard", glossary: str = "", font_style: str = "manga") -> Batch:
     """pages: list of archives.Page, in reading order."""
     batch = Batch(id=_new_id(), name=name, owner=owner, created_at=time.time(),
-                  source_lang=source_lang, target_lang=target_lang, style=style)
+                  source_lang=source_lang, target_lang=target_lang, style=style,
+                  font_style=font_style)
     page_jobs = [_create_job(page.data, page.name, owner, source_lang, target_lang, style, glossary,
-                             batch_id=batch.id, page_index=i)
+                             batch_id=batch.id, page_index=i, font_style=font_style)
                  for i, page in enumerate(pages)]
     batch.page_ids = [j.id for j in page_jobs]
     batch.save()

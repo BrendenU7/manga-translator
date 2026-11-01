@@ -22,6 +22,8 @@ async function loadConfig() {
   };
   fill($("#source-lang"), cfg.source_langs, "auto");
   fill($("#target-lang"), cfg.target_langs, "en");
+  fill($("#font-style"), cfg.font_styles, "manga");
+  fill($("#edit-font"), cfg.font_styles, "manga");
   if (cfg.translator === "mock") {
     $("#mode-note").hidden = false;
     $("#mode-note").textContent =
@@ -108,6 +110,7 @@ $("#translate-btn").addEventListener("click", async () => {
   form.append("target_lang", $("#target-lang").value);
   form.append("style", $("#style").value);
   form.append("glossary", $("#glossary").value);
+  form.append("font_style", $("#font-style").value);
 
   $("#translate-btn").disabled = true;
   $("#result-panel").hidden = true;
@@ -232,6 +235,9 @@ function showResult(page) {
   $("#result-panel").hidden = false;
   $("#img-original").src = page.original_url;
   $("#img-translated").src = bust(page.translated_url);
+  $("#cmp-original").src = page.original_url;
+  $("#cmp-translated").src = $("#img-translated").src;
+  $("#edit-font").value = page.font_style || "manga";
   $("#download").href = page.translated_url;
   const stem = page.filename.split(" / ").pop().replace(/\.\w+$/, "");
   $("#download").download = stem + "_translated.png";
@@ -260,12 +266,98 @@ $("#rerender-btn").addEventListener("click", async () => {
   const res = await fetch(`/api/jobs/${job.id}/translations`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ translations }),
+    body: JSON.stringify({ translations, font_style: $("#edit-font").value }),
   });
   $("#rerender-btn").disabled = false;
   if (!res.ok) return showError("Re-render failed");
   job = await res.json();
   $("#img-translated").src = bust(job.translated_url);
+  $("#cmp-translated").src = $("#img-translated").src;
+});
+
+// Changing the font of a finished page re-renders it right away
+$("#edit-font").addEventListener("change", () => $("#rerender-btn").click());
+
+// Live preview of the chosen lettering font
+$("#font-style").addEventListener("change", (e) => {
+  $("#font-preview").className = `font-preview font-${e.target.value}`;
+});
+
+// ------------------------------------------------------------------ before/after slider
+
+(function setupSlider() {
+  const cmp = $("#compare");
+  let dragging = false;
+  const move = (e) => {
+    const rect = cmp.getBoundingClientRect();
+    const pct = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
+    cmp.style.setProperty("--pos", `${pct}%`);
+  };
+  cmp.addEventListener("pointerdown", (e) => { dragging = true; cmp.setPointerCapture(e.pointerId); move(e); });
+  cmp.addEventListener("pointermove", (e) => dragging && move(e));
+  cmp.addEventListener("pointerup", () => { dragging = false; });
+})();
+
+// ------------------------------------------------------------------ fullscreen reader
+
+const reader = { pages: [], index: 0, original: false };
+
+function readerPages() {
+  // Finished pages of the current batch, or just the page on screen
+  if (batch) return batch.pages.filter((p) => p.status === "done").map((p) => p.id);
+  return job ? [job.id] : [];
+}
+
+function renderReader() {
+  const id = reader.pages[reader.index];
+  if (!id) return;
+  $("#reader-img").src = `/api/jobs/${id}/image/${reader.original ? "original" : "translated"}`;
+  $("#reader-count").textContent = `${reader.index + 1} / ${reader.pages.length}`;
+  $("#reader-orig").classList.toggle("on", reader.original);
+  // Preload the next page so flipping is instant
+  const next = reader.pages[reader.index + 1];
+  if (next) new Image().src = `/api/jobs/${next}/image/translated`;
+}
+
+function openReader() {
+  reader.pages = readerPages();
+  if (!reader.pages.length) return;
+  reader.index = Math.max(0, reader.pages.indexOf(shownId));
+  reader.original = false;
+  $("#reader").hidden = false;
+  try { $("#reader").requestFullscreen?.().catch(() => {}); } catch (e) { /* not allowed: overlay still works */ }
+  renderReader();
+}
+
+function closeReader() {
+  $("#reader").hidden = true;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+function flip(step) {
+  reader.index = Math.min(reader.pages.length - 1, Math.max(0, reader.index + step));
+  renderReader();
+}
+
+$("#read-btn").addEventListener("click", openReader);
+$("#reader-close").addEventListener("click", closeReader);
+$("#reader-prev").addEventListener("click", () => flip(-1));
+$("#reader-next").addEventListener("click", () => flip(1));
+$(".reader-zone.prev").addEventListener("click", () => flip(-1));
+$(".reader-zone.next").addEventListener("click", () => flip(1));
+$("#reader-orig").addEventListener("click", () => { reader.original = !reader.original; renderReader(); });
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && !$("#reader").hidden) $("#reader").hidden = true;
+});
+document.addEventListener("keydown", (e) => {
+  if ($("#reader").hidden) return;
+  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); flip(1); }
+  else if (e.key === "ArrowLeft") flip(-1);
+  else if (e.key === "Escape") closeReader();
+  else if (e.key.toLowerCase() === "o" && !reader.original) { reader.original = true; renderReader(); }
+});
+document.addEventListener("keyup", (e) => {
+  if (!$("#reader").hidden && e.key.toLowerCase() === "o") { reader.original = false; renderReader(); }
 });
 
 document.querySelectorAll(".seg button").forEach((b) =>

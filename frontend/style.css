@@ -159,3 +159,46 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .dash-actions .button { padding: 6px 12px; font-size: 14px; }
 .link-btn.danger { margin-left: auto; color: #e03131; }
 a[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+
+/* Font picker previews (fonts served from /fonts) */
+@font-face { font-family: "ComicNeue"; src: url("/fonts/ComicNeue-Bold.ttf"); font-weight: 700; }
+@font-face { font-family: "Bangers"; src: url("/fonts/Bangers-Regular.ttf"); }
+@font-face { font-family: "PatrickHand"; src: url("/fonts/PatrickHand-Regular.ttf"); }
+.font-manga { font-family: "ComicNeue", "Comic Sans MS", cursive; font-weight: 700; }
+.font-action { font-family: "Bangers", Impact, sans-serif; letter-spacing: .04em; }
+.font-handwritten { font-family: "PatrickHand", cursive; }
+.font-clean { font-family: Arial, "DejaVu Sans", sans-serif; font-weight: 700; }
+.font-preview { text-transform: uppercase; padding: 4px 12px; border: 2px solid var(--ink);
+  border-radius: 50% / 60%; background: #fff; color: #111; font-size: 15px; white-space: nowrap; }
+.edit-actions { display: flex; gap: 12px; align-items: center; }
+
+/* Before/after slider */
+.compare-wrap { display: none; }
+#viewer.slider { grid-template-columns: 1fr; justify-items: center; }
+#viewer.slider .orig, #viewer.slider .trans { display: none; }
+#viewer.slider .compare-wrap { display: block; text-align: center; }
+/* Sized by the translated image, capped to the window height so the whole page is visible */
+.compare { position: relative; display: inline-block; overflow: hidden; cursor: ew-resize;
+  user-select: none; touch-action: none; border-radius: 4px; vertical-align: top; }
+.compare img { display: block; pointer-events: none; }
+#cmp-translated { max-width: 100%; max-height: 85vh; width: auto; height: auto; }
+.cmp-orig { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+.cmp-orig img { width: 100%; height: 100%; object-fit: contain; }
+.cmp-handle { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 3px; margin-left: -1.5px;
+  background: var(--accent); }
+.cmp-handle span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: grid; place-items: center; font-size: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+
+/* Fullscreen reader (always dark, like a reading app) */
+#reader { position: fixed; inset: 0; z-index: 100; background: #0d0d10; display: grid; place-items: center;
+  padding-bottom: 56px; }  /* keep the page clear of the toolbar */
+#reader[hidden] { display: none; }
+#reader-img { max-width: 100vw; max-height: calc(100vh - 56px); object-fit: contain; }
+.reader-zone { position: absolute; top: 0; bottom: 56px; width: 35%; background: none; border-radius: 0; padding: 0; }
+.reader-zone.prev { left: 0; cursor: w-resize; }
+.reader-zone.next { right: 0; cursor: e-resize; }
+.reader-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 56px; display: flex; gap: 10px;
+  align-items: center; justify-content: center; background: rgba(0,0,0,.6); color: #ddd; }
+.reader-bar button { background: #2a2a32; color: #eee; font-weight: 500; padding: 6px 14px; }
+.reader-bar button.on { background: var(--accent); color: #fff; }

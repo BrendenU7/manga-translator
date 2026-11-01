@@ -78,7 +78,7 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
 
-    def fake_pipeline(img, source_lang, target_lang, progress, style="standard", glossary="", context=None):
+    def fake_pipeline(img, source_lang, target_lang, progress, **kwargs):
         progress("translating")
         return [], img, np.zeros_like(img)
 
@@ -121,3 +121,16 @@ def test_batch_rejects_bad_files(client):
     assert res.status_code == 400
     res = client.post("/api/batches", files=[("files", ("x.cbz", b"nope", "application/zip"))])
     assert res.status_code == 400 and "not a valid" in res.json()["detail"]
+
+
+def test_font_style_is_saved_and_can_be_changed(client):
+    files = [("files", ("p1.png", png_bytes(), "image/png"))]
+    batch = client.post("/api/batches", files=files, data={"font_style": "action"}).json()
+    batch = wait_for(client, f"/api/batches/{batch['id']}")
+    page = batch["pages"][0]["id"]
+    assert client.get(f"/api/jobs/{page}").json()["font_style"] == "action"
+
+    res = client.put(f"/api/jobs/{page}/translations", json={"font_style": "handwritten"})
+    assert res.status_code == 200 and res.json()["font_style"] == "handwritten"
+    assert client.put(f"/api/jobs/{page}/translations", json={"font_style": "wingdings"}).status_code == 400
+    assert client.post("/api/batches", files=files, data={"font_style": "nope"}).status_code == 400

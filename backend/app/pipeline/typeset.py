@@ -24,8 +24,8 @@ MIN_FONT, MAX_FONT = 9, 64
 NO_LINE_START = set("、。，．・：；？！…‥ー）」』】〉》〕！？ぁぃぅぇぉっゃゅょァィゥェォッャュョ")
 
 
-def get_font(size: int, text: str = "A") -> ImageFont.FreeTypeFont:
-    return fonts.load(fonts.font_path_for(text), size)
+def get_font(size: int, text: str = "A", style: str = "manga") -> ImageFont.FreeTypeFont:
+    return fonts.load(fonts.font_path_for(text, style), size)
 
 
 def shape(line: str, target_lang: str) -> str:
@@ -145,13 +145,14 @@ def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int,
     return lines
 
 
-def fit_text(text: str, box: Box, target_lang: str = "en") -> tuple[ImageFont.FreeTypeFont, list[str], int]:
+def fit_text(text: str, box: Box, target_lang: str = "en",
+             font_style: str = "manga") -> tuple[ImageFont.FreeTypeFont, list[str], int]:
     """Largest font size whose wrapped text fits inside box.
 
     Returns (font, display lines, line_height). Lines are already shaped for drawing.
     """
     bw, bh = box[2] - box[0], box[3] - box[1]
-    path = fonts.font_path_for(text)
+    path = fonts.font_path_for(text, font_style)
     complex_layout = target_lang == "th"
     best = None
     lo, hi = MIN_FONT, MAX_FONT
@@ -173,7 +174,8 @@ def fit_text(text: str, box: Box, target_lang: str = "en") -> tuple[ImageFont.Fr
     return best
 
 
-def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str = "en") -> np.ndarray:
+def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str = "en",
+            font_style: str = "manga") -> np.ndarray:
     pil = Image.fromarray(clean_img)
     draw = ImageDraw.Draw(pil)
     gray = cv2.cvtColor(clean_img, cv2.COLOR_RGB2GRAY)
@@ -186,7 +188,7 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
         if r.render_box is None:
             r.render_box = bubble_box(gray, r, regions)
         box = r.render_box
-        font, lines, line_h = fit_text(text, box, target_lang)
+        font, lines, line_h = fit_text(text, box, target_lang, font_style)
         total_h = line_h * len(lines)
         y = box[1] + ((box[3] - box[1]) - total_h) // 2
         cx = (box[0] + box[2]) / 2

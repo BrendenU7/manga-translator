@@ -58,7 +58,7 @@ def test_pages_translate_in_order_with_previous_dialogue(client, monkeypatch):
 
     monkeypatch.setattr(pipeline, "prepare_page", fake_prepare)
     monkeypatch.setattr(pipeline, "translate_regions", fake_translate)
-    monkeypatch.setattr(pipeline, "finish_page", lambda img, r, m, t, p: (img, img))
+    monkeypatch.setattr(pipeline, "finish_page", lambda img, *a: (img, img))
 
     batch = run_chapter(client, [10, 20, 30])
     assert batch["done"] == 3
@@ -78,7 +78,7 @@ def test_a_failed_page_does_not_block_the_next(client, monkeypatch):
 
     monkeypatch.setattr(pipeline, "prepare_page", fake_prepare)
     monkeypatch.setattr(pipeline, "translate_regions", fake_translate)
-    monkeypatch.setattr(pipeline, "finish_page", lambda img, r, m, t, p: (img, img))
+    monkeypatch.setattr(pipeline, "finish_page", lambda img, *a: (img, img))
 
     batch = run_chapter(client, [10, 20])
     assert [p["status"] for p in batch["pages"]] == ["error", "done"]

@@ -22,6 +22,15 @@ TRANSLATOR = os.getenv("TRANSLATOR", "claude" if ANTHROPIC_API_KEY else "mock")
 # or a system font that covers the target language's characters.
 FONT_PATH = os.getenv("FONT_PATH", "")
 
+# Lettering styles offered in the UI (fonts are in fonts/, all SIL Open Font License).
+# Text a style's font can't draw (e.g. Russian in Bangers) falls back to a system font.
+FONT_STYLES = {
+    "manga": "Manga (Comic Neue)",
+    "action": "Action (Bangers)",
+    "handwritten": "Handwritten (Patrick Hand)",
+    "clean": "Clean (plain sans)",
+}
+
 # Draw translations in ALL CAPS, like English manga lettering
 UPPERCASE_TEXT = os.getenv("UPPERCASE_TEXT", "1") == "1"
 

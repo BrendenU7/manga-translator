@@ -66,8 +66,14 @@ and translations are placeholders.
 
 Better Japanese OCR: `pip install manga-ocr` (it's picked up automatically).
 
-Lettering uses the bundled [Comic Neue](https://comicneue.com/) Bold (OFL licensed, see
-`fonts/OFL.txt`). To use another font, put it at `fonts/comic.ttf` or set `FONT_PATH`.
+Lettering styles: Manga ([Comic Neue](https://comicneue.com/)), Action (Bangers),
+Handwritten (Patrick Hand) and Clean (system sans). The fonts are bundled under the SIL
+Open Font License (see `fonts/licenses/`); text a font can't draw falls back to a system
+font. Pick a style before translating, or change it per page in the editor. To use your
+own font, put it at `fonts/comic.ttf` (replaces Manga) or set `FONT_PATH`.
+
+**Viewer:** side by side, translated, original, or a drag **slider** to compare the two;
+**⛶ Read** opens a fullscreen reader (← → to flip, hold O to peek at the original, Esc to close).
 
 Test page: `python samples/make_sample.py` generates `samples/sample_page.png`
 (synthetic, so there's no copyright issue for demos).
@@ -106,7 +112,7 @@ pytest                 # includes an end-to-end run on the sample page
 - [x] Dark mode
 - [x] Accounts, dashboard, 10-day auto-delete
 - [x] Context across pages + parallel processing
-- [ ] Before/after slider, reader, font picker
+- [x] Before/after slider, reader, font picker
 - [ ] Webtoon long-strip support
 - [ ] Scan cleanup + LaMa inpainting
 - [ ] Browser extension
