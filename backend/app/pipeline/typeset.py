@@ -3,26 +3,47 @@
 1. Work out how much room we have: for white bubbles, flood-fill from the text area
    to find the bubble's full interior (translations are usually wider than the
    vertical Japanese columns they replace).
-2. Find the largest font size where the word-wrapped text fits that box.
+2. Pick a font that has every character of the text (see fonts.py), then find the
+   largest size where the wrapped text fits that box. Languages written without spaces
+   (Chinese, Japanese, Thai) wrap per character; Arabic/Persian are shaped right-to-left.
 3. Draw it centered. Text over artwork gets a white outline so it stays readable.
 """
-from functools import lru_cache
+import unicodedata
 
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .. import config
+from . import fonts
 from .models import Box, TextRegion, area
 
 MIN_FONT, MAX_FONT = 9, 64
 
+# Characters that shouldn't start a line in CJK text (closing punctuation, small kana...)
+NO_LINE_START = set("、。，．・：；？！…‥ー）」』】〉》〕！？ぁぃぅぇぉっゃゅょァィゥェォッャュョ")
 
-@lru_cache(maxsize=64)
-def get_font(size: int) -> ImageFont.FreeTypeFont:
-    if config.FONT_PATH:
-        return ImageFont.truetype(config.FONT_PATH, size)
-    return ImageFont.load_default(size)
+
+def get_font(size: int, text: str = "A") -> ImageFont.FreeTypeFont:
+    return fonts.load(fonts.font_path_for(text), size)
+
+
+def shape(line: str, target_lang: str) -> str:
+    """Arabic/Persian: join letters into their connected forms and order them for display."""
+    if target_lang not in config.RTL_TARGETS:
+        return line
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    return get_display(arabic_reshaper.reshape(line))
+
+
+def prepare(text: str, target_lang: str) -> str:
+    """Comic-style ALL CAPS for scripts that have case."""
+    if not config.UPPERCASE_TEXT or target_lang in config.NO_SPACE_TARGETS | config.RTL_TARGETS:
+        return text
+    if target_lang == "tr":  # Turkish dotted/dotless i
+        text = text.replace("i", "İ").replace("ı", "I")
+    return text.upper()
 
 
 def widen_box(region: TextRegion, others: list[TextRegion], img_w: int) -> Box:
@@ -85,31 +106,59 @@ def bubble_box(clean_gray: np.ndarray, region: TextRegion,
     return inner
 
 
-def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+def _units(paragraph: str, per_char: bool) -> list[tuple[str, str]]:
+    """Split a paragraph into (piece, joiner) units that lines may break between.
+
+    Words for spaced languages; single characters for CJK/Thai, keeping combining marks
+    (Thai vowels and tones) and no-line-start punctuation attached to the previous unit.
+    """
+    if not per_char:
+        return [(w, " ") for w in paragraph.split()]
+    units: list[str] = []
+    for ch in paragraph:
+        if ch.isspace():
+            units.append(" ")
+        elif units and (unicodedata.combining(ch) or unicodedata.category(ch) == "Mn"
+                        or ch in NO_LINE_START):
+            units[-1] += ch
+        else:
+            units.append(ch)
+    return [(u, "") for u in units]
+
+
+def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int,
+              target_lang: str = "en") -> list[str]:
+    """Greedy line wrapping by width. Measures the shaped (display) form of each line."""
+    per_char = target_lang in config.CHAR_WRAP_TARGETS
     lines: list[str] = []
     for paragraph in text.split("\n"):
-        words, line = paragraph.split(), ""
-        for word in words:
-            trial = f"{line} {word}".strip()
-            if font.getlength(trial) <= max_width or not line:
+        line = ""
+        for piece, joiner in _units(paragraph, per_char):
+            trial = f"{line}{joiner}{piece}" if line else piece
+            if not line or font.getlength(shape(trial.strip(), target_lang)) <= max_width:
                 line = trial
             else:
-                lines.append(line)
-                line = word
-        if line:
-            lines.append(line)
+                lines.append(line.strip())
+                line = piece.strip()
+        if line.strip():
+            lines.append(line.strip())
     return lines
 
 
-def fit_text(text: str, box: Box) -> tuple[ImageFont.FreeTypeFont, list[str], int]:
-    """Largest font size whose wrapped text fits inside box. Returns (font, lines, line_height)."""
+def fit_text(text: str, box: Box, target_lang: str = "en") -> tuple[ImageFont.FreeTypeFont, list[str], int]:
+    """Largest font size whose wrapped text fits inside box.
+
+    Returns (font, display lines, line_height). Lines are already shaped for drawing.
+    """
     bw, bh = box[2] - box[0], box[3] - box[1]
+    path = fonts.font_path_for(text)
+    complex_layout = target_lang == "th"
     best = None
     lo, hi = MIN_FONT, MAX_FONT
     while lo <= hi:
         size = (lo + hi) // 2
-        font = get_font(size)
-        lines = wrap_text(text, font, bw)
+        font = fonts.load(path, size, complex_layout)
+        lines = [shape(line, target_lang) for line in wrap_text(text, font, bw, target_lang)]
         line_h = int(size * 1.15)
         widest = max((font.getlength(line) for line in lines), default=0)
         if widest <= bw and line_h * len(lines) <= bh:
@@ -118,12 +167,13 @@ def fit_text(text: str, box: Box) -> tuple[ImageFont.FreeTypeFont, list[str], in
         else:
             hi = size - 1
     if best is None:  # doesn't fit even at the minimum size; draw small anyway
-        font = get_font(MIN_FONT)
-        best = (font, wrap_text(text, font, bw), int(MIN_FONT * 1.15))
+        font = fonts.load(path, MIN_FONT, complex_layout)
+        lines = [shape(line, target_lang) for line in wrap_text(text, font, bw, target_lang)]
+        best = (font, lines, int(MIN_FONT * 1.15))
     return best
 
 
-def typeset(clean_img: np.ndarray, regions: list[TextRegion]) -> np.ndarray:
+def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str = "en") -> np.ndarray:
     pil = Image.fromarray(clean_img)
     draw = ImageDraw.Draw(pil)
     gray = cv2.cvtColor(clean_img, cv2.COLOR_RGB2GRAY)
@@ -132,12 +182,11 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion]) -> np.ndarray:
         text = r.translated_text.strip()
         if not text:
             continue
-        if config.UPPERCASE_TEXT:
-            text = text.upper()
+        text = prepare(text, target_lang)
         if r.render_box is None:
             r.render_box = bubble_box(gray, r, regions)
         box = r.render_box
-        font, lines, line_h = fit_text(text, box)
+        font, lines, line_h = fit_text(text, box, target_lang)
         total_h = line_h * len(lines)
         y = box[1] + ((box[3] - box[1]) - total_h) // 2
         cx = (box[0] + box[2]) / 2

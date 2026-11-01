@@ -105,7 +105,7 @@ def update_translations(job: Job, edits: dict[int, str]) -> Job:
         if r.id in edits:
             r.translated_text = edits[r.id]
     cleaned = _load_rgb(job.dir / "cleaned.png")
-    Image.fromarray(rerender(cleaned, regions)).save(job.dir / "translated.png")
+    Image.fromarray(rerender(cleaned, regions, job.target_lang)).save(job.dir / "translated.png")
     job.regions = [r.to_dict() for r in regions]
     job.save()
     return job

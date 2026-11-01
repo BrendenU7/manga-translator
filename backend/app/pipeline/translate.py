@@ -39,6 +39,7 @@ Rules:
 - The OCR is often wrong (misread or missing characters). {read_rule}
 - Use the whole page for context: who is speaking, what is happening, the series' terminology.
 - Keep translations concise: they must fit back into the same bubble.
+- If a bubble is already in {target}, keep it as is (fix obvious OCR errors only).
 - Keep stammers and trailing dots ("Th-this is...", "Beast...!").
 - Translate sound effects briefly ("BAM", "THUD").
 - If a region is not text (a mis-detection), return an empty string for it.
@@ -82,8 +83,8 @@ def _crop(page: np.ndarray, box, pad: int = 8) -> np.ndarray:
 def build_messages(regions: list[TextRegion], source_lang: str, target_lang: str,
                    page: np.ndarray | None = None, style: str = "standard", glossary: str = ""):
     """Build (system, messages) for the Claude API."""
-    source = config.SOURCE_LANGS.get(source_lang, source_lang)
-    target = config.TARGET_LANGS.get(target_lang, target_lang)
+    source = config.LANG_NAMES_EN.get(source_lang, source_lang)
+    target = config.LANG_NAMES_EN.get(target_lang, target_lang)
     vision = page is not None and config.CLAUDE_VISION
     glossary = glossary.strip()
     system = SYSTEM_PROMPT.format(
@@ -104,8 +105,8 @@ def build_messages(regions: list[TextRegion], source_lang: str, target_lang: str
     content: list[dict] = [{"type": "text", "text": f"{header}\nThe full page, for context:"},
                            _image_block(page, 1200)]
     for r in regions:
-        content.append({"type": "text",
-                        "text": f"Bubble id={r.id} (OCR reading: {json.dumps(r.source_text, ensure_ascii=False)}):"})
+        hint = f" (OCR reading: {json.dumps(r.source_text, ensure_ascii=False)})" if r.source_text else ""
+        content.append({"type": "text", "text": f"Bubble id={r.id}{hint}:"})
         content.append(_image_block(_crop(page, r.box), 512))
     content.append({"type": "text", "text": "Return the JSON now."})
     return system, [{"role": "user", "content": content}]

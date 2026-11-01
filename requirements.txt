@@ -10,6 +10,9 @@ numpy>=1.26
 python-dotenv>=1.0
 pymupdf>=1.24        # PDF pages -> images for batch upload
 pillow-heif>=0.18    # HEIC/HEIF images (iPhone photos)
+fonttools>=4.40      # checks which characters a font can draw
+arabic-reshaper>=3.0 # Arabic/Persian letter shaping (with python-bidi, from easyocr)
+python-bidi>=0.4
 rarfile>=4.2         # RAR/CBR archives (also needs UnRAR or 7-Zip installed)
 
 # Optional but recommended for Japanese: much better on vertical manga text.

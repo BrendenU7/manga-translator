@@ -101,3 +101,55 @@ def test_end_to_end_on_sample_page(monkeypatch):
     assert sum(r.vertical for r in regions) >= 3
     assert all(r.translated_text for r in regions)
     assert result.shape == img.shape
+
+
+# --------------------------------------------------------------------- languages
+
+import importlib
+
+from backend.app.pipeline import fonts
+
+ts = importlib.import_module("backend.app.pipeline.typeset")  # module, not the typeset() function
+
+
+def _covers(path, text):
+    return {ord(c) for c in text if not c.isspace()} <= fonts._charset(path)
+
+
+def test_font_picker_covers_each_script():
+    for text in ["Hey, wait up!", "Эй, подожди!", "喂，等等我！"]:
+        path = fonts.font_path_for(text)
+        assert path and _covers(path, text), text
+
+
+def test_chinese_wraps_per_character_without_breaking_before_punctuation():
+    font = ts.get_font(20, "今天真的好热啊。")
+    lines = ts.wrap_text("今天真的好热啊。", font, 70, "zh-Hans")
+    assert len(lines) > 1
+    assert all(not line.startswith("。") for line in lines)
+    assert "".join(lines) == "今天真的好热啊。"
+
+
+def test_thai_wraps_at_spaces_only():
+    font = ts.get_font(20, "วันนี้ร้อนจริงๆ เลยนะ")
+    lines = ts.wrap_text("วันนี้ร้อนจริงๆ เลยนะ", font, 60, "th")
+    assert lines == ["วันนี้ร้อนจริงๆ", "เลยนะ"]
+
+
+def test_arabic_is_shaped_for_display():
+    shaped = ts.shape("مرحبا", "ar")
+    assert shaped != "مرحبا"            # joined letter forms, display order
+    assert ts.shape("hello", "en") == "hello"
+
+
+def test_caps_rules():
+    assert ts.prepare("istanbul", "tr") == "İSTANBUL"
+    assert ts.prepare("hey", "en") == "HEY"
+    assert ts.prepare("今天", "zh-Hans") == "今天"
+
+
+def test_every_target_language_has_a_prompt_name():
+    from backend.app import config
+    assert set(config.TARGET_LANGS) <= set(config.LANG_NAMES_EN)
+    assert set(config.SOURCE_LANGS) <= set(config.LANG_NAMES_EN)
+    assert len(config.TARGET_LANGS) == 27

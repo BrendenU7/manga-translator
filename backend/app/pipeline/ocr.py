@@ -10,6 +10,7 @@ import threading
 import numpy as np
 from PIL import Image
 
+from .. import config
 from .detect import get_reader
 from .models import TextRegion
 
@@ -86,11 +87,15 @@ def _easyocr_lines(img: np.ndarray, region: TextRegion, source_lang: str) -> str
             crop = column_to_strip(crop)
         res = reader.recognize(crop, detail=0, paragraph=False)
         parts.append("".join(res) if region.vertical else " ".join(res))
-    sep = "" if source_lang in ("ja", "zh") else " "
+    sep = "" if source_lang in config.VERTICAL_SOURCES or source_lang == "auto" else " "
     return sep.join(p.strip() for p in parts if p.strip())
 
 
 def read_region(img: np.ndarray, region: TextRegion, source_lang: str) -> str:
+    if source_lang == "auto":
+        if config.TRANSLATOR == "claude" and config.CLAUDE_VISION:
+            return ""  # Claude reads the image and detects the language; OCR adds nothing
+        source_lang = "ja"  # no vision: assume manga
     if source_lang == "ja":
         mocr = get_manga_ocr()
         if mocr is not None:

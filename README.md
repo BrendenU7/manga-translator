@@ -28,6 +28,15 @@ unpacked and PDFs rendered into pages in natural order (page2 before page10); ea
 becomes a job, and the UI shows overall progress, a page strip to review/edit any page,
 and a "Download all" ZIP.
 
+**Languages:** source can be Auto-detect (Claude reads the bubbles and works out the
+language; reading order is inferred from the layout), Japanese, Chinese (Simplified /
+Traditional), Korean or English. 27 target languages, including Chinese, Japanese, Korean,
+Russian, Thai, Arabic and Persian. `pipeline/fonts.py` picks a font that has every
+character needed (bundled Comic Neue for Latin, then system fonts on Windows/macOS/Linux);
+Chinese/Japanese wrap per character, Arabic/Persian are shaped right-to-left.
+
+**Dark mode:** toggle in the header; follows the system setting until you choose.
+
 Supported uploads: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC · ZIP, CBZ, EPUB · RAR, CBR
 (needs [7-Zip](https://www.7-zip.org/) or UnRAR installed) · PDF.
 
@@ -81,6 +90,8 @@ pytest                 # includes an end-to-end run on the sample page
 - [x] Claude reads bubble images (vision) instead of trusting OCR
 - [x] Translation styles + glossary
 - [ ] Context across pages in a batch (previous page's dialogue in the prompt)
+- [x] 27 target languages + auto-detect source
+- [x] Dark mode
 - [ ] Font style choices
 - [ ] Drag/resize text boxes in the editor
 - [ ] Docker + deploy (backend on a GPU host, frontend static)

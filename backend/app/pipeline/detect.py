@@ -19,7 +19,12 @@ _readers: dict[str, object] = {}
 _lock = threading.Lock()
 
 # EasyOCR language codes for each source language
-EASYOCR_LANGS = {"ja": ["ja", "en"], "zh": ["ch_sim", "en"], "ko": ["ko", "en"]}
+EASYOCR_LANGS = {"auto": ["ja", "en"], "ja": ["ja", "en"], "zh-Hans": ["ch_sim", "en"],
+                 "zh-Hant": ["ch_tra", "en"], "ko": ["ko", "en"], "en": ["en"]}
+
+
+def may_be_vertical(source_lang: str) -> bool:
+    return source_lang in config.VERTICAL_SOURCES or source_lang == "auto"
 
 
 def get_reader(source_lang: str):
@@ -140,7 +145,7 @@ def _regions_easyocr(img: np.ndarray, source_lang: str) -> list[TextRegion]:
     for group in group_lines(detect_lines(img, source_lang)):
         box = union(group)
         vertical = False
-        if source_lang in ("ja", "zh"):
+        if may_be_vertical(source_lang):
             cols = split_columns(_dark_ink(img, box), box)
             if cols:
                 group, vertical = cols, True
@@ -157,9 +162,11 @@ def _regions_ctd(img: np.ndarray, source_lang: str) -> tuple[list[TextRegion], n
     for box in boxes:
         x1, y1, x2, y2 = box
         ink = mask[y1:y2, x1:x2] > 0
-        cols = split_columns(ink, box) if source_lang in ("ja", "zh") else None
-        # Japanese/Chinese blocks are vertical unless clearly wider than tall
-        vertical = source_lang in ("ja", "zh") and (cols is not None or (y2 - y1) >= 0.8 * (x2 - x1))
+        cols = split_columns(ink, box) if may_be_vertical(source_lang) else None
+        # Japanese/Chinese blocks are vertical unless clearly wider than tall. With auto-detect
+        # we only call it vertical when it really looks like columns.
+        tall_ratio = 1.3 if source_lang == "auto" else 0.8
+        vertical = may_be_vertical(source_lang) and (cols is not None or (y2 - y1) >= tall_ratio * (x2 - x1))
         regions.append(TextRegion(id=0, box=box, line_boxes=cols or [box], vertical=vertical))
     return regions, mask
 
@@ -193,7 +200,13 @@ def detect_regions(img: np.ndarray, source_lang: str) -> tuple[list[TextRegion],
     else:
         regions = _regions_easyocr(img, source_lang)
 
-    ordered = reading_order(regions, img.shape[0], rtl=source_lang in ("ja", "zh"))
+    # Manga/manhua read right-to-left. With auto-detect, decide from the layout:
+    # mostly vertical text means a right-to-left page.
+    if source_lang == "auto":
+        rtl = sum(r.vertical for r in regions) * 2 > len(regions)
+    else:
+        rtl = source_lang in config.VERTICAL_SOURCES
+    ordered = reading_order(regions, img.shape[0], rtl=rtl)
     for i, r in enumerate(ordered):
         r.id = i
     return ordered, mask

@@ -5,11 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Manga Translator</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Apply the saved theme (or the system setting) before the page draws, so it doesn't flash
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
 </head>
 <body>
   <header>
-    <h1>漫 <span>Manga Translator</span></h1>
-    <p class="tag">Detect bubbles → OCR → LLM translation → clean → typeset</p>
+    <div>
+      <h1>漫 <span>Manga Translator</span></h1>
+      <p class="tag">Detect bubbles → OCR → LLM translation → clean → typeset</p>
+    </div>
+    <button id="theme-toggle" type="button" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
   </header>
 
   <main>

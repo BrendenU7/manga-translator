@@ -21,7 +21,7 @@ async function loadConfig() {
       .map(([code, name]) => `<option value="${code}" ${code === def ? "selected" : ""}>${name}</option>`)
       .join("");
   };
-  fill($("#source-lang"), cfg.source_langs, "ja");
+  fill($("#source-lang"), cfg.source_langs, "auto");
   fill($("#target-lang"), cfg.target_langs, "en");
   if (cfg.translator === "mock") {
     $("#mode-note").hidden = false;
@@ -276,5 +276,21 @@ document.querySelectorAll(".seg button").forEach((b) =>
     document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("active", x === b));
     $("#viewer").className = b.dataset.view;
   }));
+
+// ------------------------------------------------------------------ dark mode
+
+function renderThemeButton() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  $("#theme-toggle").textContent = dark ? "☀" : "☾";
+  $("#theme-toggle").title = dark ? "Switch to light mode" : "Switch to dark mode";
+}
+
+$("#theme-toggle").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch (e) { /* storage blocked: still works this visit */ }
+  renderThemeButton();
+});
+renderThemeButton();
 
 loadConfig();

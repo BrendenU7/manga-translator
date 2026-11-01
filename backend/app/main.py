@@ -49,7 +49,7 @@ def get_config():
 
 @app.post("/api/jobs")
 async def create_job(file: UploadFile = File(...),
-                     source_lang: str = Form("ja"),
+                     source_lang: str = Form("auto"),
                      target_lang: str = Form("en"),
                      style: str = Form("standard"),
                      glossary: str = Form("")):
@@ -131,7 +131,7 @@ def _check_options(source_lang: str, target_lang: str, style: str):
 
 @app.post("/api/batches")
 async def create_batch(files: list[UploadFile] = File(...),
-                       source_lang: str = Form("ja"),
+                       source_lang: str = Form("auto"),
                        target_lang: str = Form("en"),
                        style: str = Form("standard"),
                        glossary: str = Form("")):

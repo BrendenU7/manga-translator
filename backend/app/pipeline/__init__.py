@@ -36,10 +36,10 @@ def run_pipeline(img: np.ndarray, source_lang: str, target_lang: str,
     progress("cleaning")
     cleaned = clean_regions(img, regions, text_mask)
     progress("typesetting")
-    result = typeset(cleaned, regions)
+    result = typeset(cleaned, regions, target_lang)
     return regions, cleaned, result
 
 
-def rerender(cleaned: np.ndarray, regions: list[TextRegion]) -> np.ndarray:
+def rerender(cleaned: np.ndarray, regions: list[TextRegion], target_lang: str = "en") -> np.ndarray:
     """Redraw text after the user edits translations (no OCR/LLM calls needed)."""
-    return typeset(cleaned, regions)
+    return typeset(cleaned, regions, target_lang)
