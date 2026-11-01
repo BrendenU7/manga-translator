@@ -8,6 +8,9 @@ onnxruntime>=1.17   # runs the manga text detector
 pillow>=10.0
 numpy>=1.26
 python-dotenv>=1.0
+pymupdf>=1.24        # PDF pages -> images for batch upload
+pillow-heif>=0.18    # HEIC/HEIF images (iPhone photos)
+rarfile>=4.2         # RAR/CBR archives (also needs UnRAR or 7-Zip installed)
 
 # Optional but recommended for Japanese: much better on vertical manga text.
 # Downloads a ~450 MB model from Hugging Face on first use.

@@ -15,10 +15,20 @@
   <main>
     <section id="upload-panel" class="card">
       <label id="dropzone" for="file-input">
-        <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden>
-        <strong>Drop a page here</strong> or click to browse
-        <small>PNG, JPG, WebP · one page at a time</small>
+        <input id="file-input" type="file" multiple
+               accept="image/*,.avif,.heic,.heif,.zip,.cbz,.epub,.rar,.cbr,.pdf" hidden>
+        <span class="upload-icon">⇪</span>
+        <span><strong>Drag &amp; drop manga pages here,</strong> or <span class="link">browse files</span></span>
+        <small>JPG, PNG, WebP, GIF, AVIF, HEIC · PDF, EPUB, CBZ/CBR, ZIP/RAR</small>
+        <small>Several files at once are fine: a document becomes one batch with all its pages.</small>
       </label>
+      <div id="file-list" hidden>
+        <div class="file-head">
+          <span id="file-count" class="note"></span>
+          <button id="clear-all" class="link-btn" type="button">✕ Clear all</button>
+        </div>
+        <div id="file-grid"></div>
+      </div>
       <div class="controls">
         <label>From <select id="source-lang"></select></label>
         <label>To <select id="target-lang"></select></label>
@@ -39,6 +49,10 @@
     </section>
 
     <section id="progress-panel" class="card" hidden>
+      <div id="batch-progress" hidden>
+        <div class="bar"><div id="bar-fill"></div></div>
+        <p id="batch-count" class="note"></p>
+      </div>
       <ol id="stages">
         <li data-stage="detecting">Detect bubbles</li>
         <li data-stage="reading">Read text</li>
@@ -56,8 +70,12 @@
           <button data-view="translated">Translated</button>
           <button data-view="original">Original</button>
         </div>
-        <a id="download" class="button" download>Download PNG</a>
+        <div class="downloads">
+          <a id="download" class="button secondary" download>Download page</a>
+          <a id="download-all" class="button" hidden>Download all (ZIP)</a>
+        </div>
       </div>
+      <div id="page-strip" hidden></div>
       <div id="viewer" class="side">
         <figure class="orig"><img id="img-original" alt="Original page"><figcaption>Original</figcaption></figure>
         <figure class="trans"><img id="img-translated" alt="Translated page"><figcaption>Translated</figcaption></figure>

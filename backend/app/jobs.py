@@ -109,3 +109,70 @@ def update_translations(job: Job, edits: dict[int, str]) -> Job:
     job.regions = [r.to_dict() for r in regions]
     job.save()
     return job
+
+
+# ---------------------------------------------------------------------------
+# Batches: many pages (from several images, a ZIP/CBZ or a PDF) translated together.
+# Each page is an ordinary Job; the batch just keeps their ids in reading order.
+# ---------------------------------------------------------------------------
+
+_batches: dict[str, "Batch"] = {}
+
+
+@dataclass
+class Batch:
+    id: str
+    name: str
+    page_ids: list[str] = field(default_factory=list)
+
+    @property
+    def path(self) -> Path:
+        return config.DATA_DIR / "batches" / f"{self.id}.json"
+
+    def save(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(asdict(self), ensure_ascii=False))
+
+    def pages(self) -> list[Job]:
+        return [j for j in (get_job(pid) for pid in self.page_ids) if j is not None]
+
+
+def create_batch(pages, name: str, source_lang: str, target_lang: str,
+                 style: str = "standard", glossary: str = "") -> Batch:
+    """pages: list of archives.Page. Jobs run one at a time, in page order."""
+    batch = Batch(id=uuid.uuid4().hex[:12], name=name)
+    for page in pages:
+        job = create_job(page.data, page.name, source_lang, target_lang, style, glossary)
+        batch.page_ids.append(job.id)
+    batch.save()
+    with _lock:
+        _batches[batch.id] = batch
+    return batch
+
+
+def get_batch(batch_id: str) -> Batch | None:
+    with _lock:
+        batch = _batches.get(batch_id)
+    if batch is None and batch_id.isalnum():
+        path = config.DATA_DIR / "batches" / f"{batch_id}.json"
+        if path.exists():
+            batch = Batch(**json.loads(path.read_text()))
+            with _lock:
+                _batches[batch_id] = batch
+    return batch
+
+
+def batch_zip(batch: Batch) -> bytes:
+    """ZIP of every finished translated page, numbered in reading order."""
+    import re
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:  # PNGs are already compressed
+        for i, job in enumerate(batch.pages(), start=1):
+            path = job.dir / "translated.png"
+            if job.status == "done" and path.exists():
+                stem = Path(job.filename.split(" / ")[-1]).stem
+                stem = re.sub(r"[^\w\-]+", "_", stem)[:60] or "page"
+                zf.write(path, f"{i:03d}_{stem}.png")
+    return buf.getvalue()

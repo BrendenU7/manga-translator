@@ -1,6 +1,6 @@
 # Manga Translator
 
-Upload a manga page. The app finds the speech bubbles, reads the Japanese, Chinese or Korean
+Upload a manga page, or a whole chapter as a ZIP, CBZ, EPUB, RAR or PDF. The app finds the speech bubbles, reads the Japanese, Chinese or Korean
 text, translates it with Claude, erases the original lettering and typesets the
 translation back into the bubbles. You can then fix any line by hand and re-render.
 
@@ -22,6 +22,14 @@ upload ─▶ detect ─▶ OCR ─▶ translate ─▶ clean ─▶ typeset ─
 
 The backend is FastAPI. Each page is a background job, and the frontend polls for
 progress. Edits only re-run the typesetting step, using the saved cleaned image.
+
+**Batch upload** (`archives.py`): several images and/or documents at once. Archives are
+unpacked and PDFs rendered into pages in natural order (page2 before page10); each page
+becomes a job, and the UI shows overall progress, a page strip to review/edit any page,
+and a "Download all" ZIP.
+
+Supported uploads: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC · ZIP, CBZ, EPUB · RAR, CBR
+(needs [7-Zip](https://www.7-zip.org/) or UnRAR installed) · PDF.
 
 ## Run it
 
@@ -57,19 +65,23 @@ pytest                 # includes an end-to-end run on the sample page
 | Method | Path | |
 |---|---|---|
 | `GET` | `/api/config` | Supported languages, translator mode |
-| `POST` | `/api/jobs` | multipart: `file`, `source_lang`, `target_lang` → job |
+| `POST` | `/api/jobs` | multipart: `file`, `source_lang`, `target_lang`, `style`, `glossary` → job |
+| `POST` | `/api/batches` | multipart: `files` (repeat), same options → batch of page jobs |
+| `GET` | `/api/batches/{id}` | Progress (`done` / `total`) and each page's status |
+| `GET` | `/api/batches/{id}/download` | ZIP of all translated pages |
 | `GET` | `/api/jobs/{id}` | Status, current stage, regions (source and translated text, boxes) |
 | `GET` | `/api/jobs/{id}/image/{original,translated,cleaned}` | PNG |
 | `PUT` | `/api/jobs/{id}/translations` | `{"translations":[{"id":0,"text":"..."}]}` → re-render |
 
 ## Roadmap
 
-- [ ] Batch: CBZ/ZIP/PDF upload, split into pages, download as ZIP
+- [x] Batch: ZIP/CBZ/EPUB/RAR/PDF upload, split into pages, download as ZIP
 - [ ] LaMa inpainting for text over artwork
 - [x] Manga-specific text detector (comic-text-detector)
 - [x] Claude reads bubble images (vision) instead of trusting OCR
 - [x] Translation styles + glossary
-- [ ] Context across pages (previous page's dialogue in the prompt)
+- [ ] Context across pages in a batch (previous page's dialogue in the prompt)
+- [ ] Font style choices
 - [ ] Drag/resize text boxes in the editor
 - [ ] Docker + deploy (backend on a GPU host, frontend static)
 

@@ -41,7 +41,8 @@ CTD_THREADS = int(os.getenv("CTD_THREADS", "0"))  # 0 = use all CPU cores
 # Send Claude an image of each bubble so it can read the text itself, not just the OCR guess
 CLAUDE_VISION = os.getenv("CLAUDE_VISION", "1") == "1"
 
-MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))          # single image
+MAX_BATCH_UPLOAD_MB = int(os.getenv("MAX_BATCH_UPLOAD_MB", "500"))  # total for a batch
 USE_GPU = os.getenv("USE_GPU", "0") == "1"
 
 SOURCE_LANGS = {"ja": "Japanese", "zh": "Chinese (Simplified)", "ko": "Korean"}
