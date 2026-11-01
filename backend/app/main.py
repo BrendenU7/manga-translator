@@ -317,7 +317,19 @@ def download_batch(batch_id: str, user: User = Depends(current_user)):
                     headers={"Content-Disposition": f'attachment; filename="{stem}_translated.zip"'})
 
 
+class FreshStaticFiles(StaticFiles):
+    """Static files the browser must re-check every time (no-cache = revalidate first).
+
+    Without this, browsers may keep showing an old index.html/app.js after an update.
+    The ETag check is cheap: unchanged files come back as a tiny 304 response.
+    """
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Lettering fonts, so the font picker can preview them (all OFL licensed)
 app.mount("/fonts", StaticFiles(directory=config.ROOT / "fonts"), name="fonts")
 # Frontend (mounted last so /api routes take priority)
-app.mount("/", StaticFiles(directory=config.FRONTEND_DIR, html=True), name="frontend")
+app.mount("/", FreshStaticFiles(directory=config.FRONTEND_DIR, html=True), name="frontend")

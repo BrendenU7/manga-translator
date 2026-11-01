@@ -159,3 +159,9 @@ def test_quality_is_saved_and_cost_reported(client):
     cfg = client.get("/api/config").json()
     assert set(cfg["qualities"]) == {"economy", "best"}
     assert cfg["qualities"]["economy"]["est_page_usd"] < cfg["qualities"]["best"]["est_page_usd"]
+
+
+def test_frontend_is_never_served_stale(client):
+    res = client.get("/index.html")
+    assert res.status_code == 200 and res.headers["cache-control"] == "no-cache"
+    assert 'id="quality"' in res.text
