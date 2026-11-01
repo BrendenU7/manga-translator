@@ -25,27 +25,64 @@ def get_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default(size)
 
 
-def bubble_box(clean_gray: np.ndarray, region: TextRegion) -> Box:
-    """Bounding box of the white bubble around a region, shrunk to stay off the outline."""
+def widen_box(region: TextRegion, others: list[TextRegion], img_w: int) -> Box:
+    """Give text without a closed bubble more width.
+
+    Japanese is set in tall, narrow columns; English needs a wider box. Grow the box
+    sideways (centered) until it's about as wide as it is tall, without running into
+    other text regions or off the page.
+    """
     x1, y1, x2, y2 = region.box
-    if not region.on_light_bg:
+    w, h = x2 - x1, y2 - y1
+    target = max(w, int(h * 0.9))
+    if target <= w:
         return region.box
+    cx = (x1 + x2) // 2
+    nx1, nx2 = max(0, cx - target // 2), min(img_w, cx + target // 2)
+    for o in others:
+        if o is region:
+            continue
+        ox1, oy1, ox2, oy2 = o.box
+        if oy2 <= y1 or oy1 >= y2:  # no vertical overlap, can't collide
+            continue
+        if ox2 <= x1:
+            nx1 = max(nx1, ox2 + 4)
+        elif ox1 >= x2:
+            nx2 = min(nx2, ox1 - 4)
+    return (min(nx1, x1), y1, max(nx2, x2), y2)
+
+
+def bubble_box(clean_gray: np.ndarray, region: TextRegion,
+               others: list[TextRegion] | None = None) -> Box:
+    """Where to draw the translation for a region.
+
+    For text in a white bubble: flood-fill the bubble to find its interior, shrunk to
+    stay off the outline. If there's no closed bubble, widen the text's own box.
+    """
+    x1, y1, x2, y2 = region.box
+    others = others or []
+    fallback = widen_box(region, others, clean_gray.shape[1])
+    if not region.on_light_bg:
+        return fallback
     h, w = clean_gray.shape
     binary = (clean_gray > 200).astype(np.uint8)
     seed = ((x1 + x2) // 2, (y1 + y2) // 2)
     if binary[seed[1], seed[0]] == 0:
-        return region.box
+        return fallback
     mask = np.zeros((h + 2, w + 2), np.uint8)
     _, _, _, rect = cv2.floodFill(binary.copy(), mask, seed, 2, flags=4 | (255 << 8))
     bx, by, bw, bh = rect
     touches_edge = bx <= 0 or by <= 0 or bx + bw >= w or by + bh >= h
     if touches_edge or bw * bh > 15 * area(region.box):
-        return region.box  # leaked into the page background; don't trust it
+        return fallback  # leaked into the page background; don't trust it
     # A rectangle inscribed in an ellipse covers ~70% of its width/height
     sx, sy = int(bw * 0.15), int(bh * 0.15)
-    inner = (bx + sx, by + sy, bx + bw - sx, by + bh - sy)
-    # Never shrink below the original text area
-    return (min(inner[0], x1), min(inner[1], y1), max(inner[2], x2), max(inner[3], y2))
+    inner = (min(bx + sx, x1), min(by + sy, y1), max(bx + bw - sx, x2), max(by + bh - sy, y2))
+    # Still too narrow for English? Widen toward the fallback, but stay inside the bubble
+    if fallback[2] - fallback[0] > inner[2] - inner[0]:
+        inner = (max(min(inner[0], fallback[0]), bx + 2), inner[1],
+                 min(max(inner[2], fallback[2]), bx + bw - 2), inner[3])
+    return inner
 
 
 def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
@@ -95,8 +132,10 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion]) -> np.ndarray:
         text = r.translated_text.strip()
         if not text:
             continue
+        if config.UPPERCASE_TEXT:
+            text = text.upper()
         if r.render_box is None:
-            r.render_box = bubble_box(gray, r)
+            r.render_box = bubble_box(gray, r, regions)
         box = r.render_box
         font, lines, line_h = fit_text(text, box)
         total_h = line_h * len(lines)

@@ -3,6 +3,8 @@ from typing import Callable
 
 import numpy as np
 
+from .. import config
+
 from .clean import clean_regions
 from .detect import detect_regions
 from .models import TextRegion
@@ -16,16 +18,23 @@ ProgressFn = Callable[[str], None]
 
 
 def run_pipeline(img: np.ndarray, source_lang: str, target_lang: str,
-                 progress: ProgressFn = lambda s: None):
+                 progress: ProgressFn = lambda s: None,
+                 style: str = "standard", glossary: str = ""):
     """Translate one page. Returns (regions, cleaned_image, translated_image)."""
     progress("detecting")
-    regions = detect_regions(img, source_lang)
+    regions, text_mask = detect_regions(img, source_lang)
     progress("reading")
-    regions = read_regions(img, regions, source_lang)
+    claude_reads_images = config.TRANSLATOR == "claude" and config.CLAUDE_VISION
+    regions = read_regions(img, regions, source_lang, keep_empty=claude_reads_images)
     progress("translating")
-    regions = translate_regions(regions, source_lang, target_lang)
+    regions = translate_regions(regions, source_lang, target_lang,
+                                page=img, style=style, glossary=glossary)
+    # Claude returns "" for detections that aren't really text: leave those untouched
+    regions = [r for r in regions if r.translated_text.strip()]
+    for i, r in enumerate(regions):
+        r.id = i
     progress("cleaning")
-    cleaned = clean_regions(img, regions)
+    cleaned = clean_regions(img, regions, text_mask)
     progress("typesetting")
     result = typeset(cleaned, regions)
     return regions, cleaned, result

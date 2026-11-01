@@ -32,6 +32,8 @@ class Job:
     filename: str
     source_lang: str
     target_lang: str
+    style: str = "standard"
+    glossary: str = ""
     status: str = "queued"          # queued | running | done | error
     stage: str = "queued"           # detecting | reading | translating | cleaning | typesetting
     error: str = ""
@@ -49,9 +51,11 @@ def _load_rgb(path: Path) -> np.ndarray:
     return np.array(Image.open(path).convert("RGB"))
 
 
-def create_job(data: bytes, filename: str, source_lang: str, target_lang: str) -> Job:
+def create_job(data: bytes, filename: str, source_lang: str, target_lang: str,
+               style: str = "standard", glossary: str = "") -> Job:
     job = Job(id=uuid.uuid4().hex[:12], filename=filename,
-              source_lang=source_lang, target_lang=target_lang)
+              source_lang=source_lang, target_lang=target_lang,
+              style=style, glossary=glossary)
     job.dir.mkdir(parents=True, exist_ok=True)
     # Normalize every upload (PNG/JPG/WebP/...) to PNG
     Image.open(io.BytesIO(data)).convert("RGB").save(job.dir / "original.png")
@@ -82,7 +86,8 @@ def _run(job: Job):
     try:
         job.status = "running"
         img = _load_rgb(job.dir / "original.png")
-        regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress)
+        regions, cleaned, result = run_pipeline(img, job.source_lang, job.target_lang, progress,
+                                                style=job.style, glossary=job.glossary)
         Image.fromarray(cleaned).save(job.dir / "cleaned.png")
         Image.fromarray(result).save(job.dir / "translated.png")
         job.regions = [r.to_dict() for r in regions]

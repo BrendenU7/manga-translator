@@ -22,8 +22,19 @@
       <div class="controls">
         <label>From <select id="source-lang"></select></label>
         <label>To <select id="target-lang"></select></label>
+        <label>Style
+          <select id="style">
+            <option value="standard">Standard (natural, localized)</option>
+            <option value="honorifics">Keep honorifics</option>
+            <option value="faithful">Faithful (scanlation style)</option>
+          </select>
+        </label>
         <button id="translate-btn" disabled>Translate</button>
       </div>
+      <details class="glossary">
+        <summary>Glossary <span class="note">· character names and terms to use on every page</span></summary>
+        <textarea id="glossary" rows="3" placeholder="悟飯 = Gohan&#10;ビースト = Beast&#10;気 = ki"></textarea>
+      </details>
       <p id="mode-note" class="note" hidden></p>
     </section>
 

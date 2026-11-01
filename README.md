@@ -14,11 +14,11 @@ upload ─▶ detect ─▶ OCR ─▶ translate ─▶ clean ─▶ typeset ─
 
 | Step | File | Approach |
 |---|---|---|
-| Detect | `pipeline/detect.py` | EasyOCR's CRAFT detector finds text lines; nearby lines are merged into bubbles (union-find); a projection profile splits vertical text into columns; regions are sorted in manga reading order (right-to-left). |
+| Detect | `pipeline/detect.py`, `pipeline/ctd.py` | [comic-text-detector](https://github.com/dmMaze/comic-text-detector), a model trained on manga pages, run with ONNX Runtime. It finds whole text blocks (vertical Japanese, hand-lettering next to screentone) and outputs a per-pixel text mask. Regions are sorted in manga reading order (right-to-left). EasyOCR's generic detector is the fallback. |
 | OCR | `pipeline/ocr.py` | [manga-ocr](https://github.com/kha-white/manga-ocr) for Japanese if installed; otherwise EasyOCR. Vertical columns are cut into characters and laid out horizontally so EasyOCR can read them. |
-| Translate | `pipeline/translate.py` | The whole page is sent to Claude in one request, as JSON in reading order, so the model has context and can correct OCR mistakes. Returns JSON. |
-| Clean | `pipeline/clean.py` | Text in white bubbles: strokes repainted with the bubble color. Text over artwork: stroke mask + OpenCV inpainting. |
-| Typeset | `pipeline/typeset.py` | Flood-fills the bubble to find its real size, binary-searches the largest font that fits after word wrapping, and draws the text centered (with an outline over artwork). |
+| Translate | `pipeline/translate.py` | One Claude request per page. Claude gets the full page plus an image of every bubble with the OCR guess, reads the text itself (OCR on manga lettering is unreliable), and returns its reading plus the translation as JSON. Supports translation styles (standard / keep honorifics / faithful) and a glossary for names and terms. |
+| Clean | `pipeline/clean.py` | Erases the masked lettering pixels. On white backgrounds they're repainted with the bubble color; over artwork they're filled in with OpenCV inpainting. |
+| Typeset | `pipeline/typeset.py` | Flood-fills the bubble to find its real size (or widens the text box when there's no closed bubble), binary-searches the largest font that fits after word wrapping, and draws centered ALL-CAPS text in Comic Neue (with an outline over artwork). |
 
 The backend is FastAPI. Each page is a background job, and the frontend polls for
 progress. Edits only re-run the typesetting step, using the saved cleaned image.
@@ -32,14 +32,15 @@ cp .env.example .env        # add your ANTHROPIC_API_KEY
 uvicorn backend.app.main:app --reload
 ```
 
-Open http://localhost:8000. The first run downloads the EasyOCR models (~100 MB).
+Open http://localhost:8000. The first run downloads the manga text detector (~95 MB, into
+`models/`) and the EasyOCR models (~100 MB).
 Without an API key the app runs in demo mode: detection, OCR and typesetting are real,
 and translations are placeholders.
 
 Better Japanese OCR: `pip install manga-ocr` (it's picked up automatically).
 
-Better lettering: put a comic font at `fonts/comic.ttf` or set `FONT_PATH`.
-[Comic Neue](https://comicneue.com/) is free (OFL).
+Lettering uses the bundled [Comic Neue](https://comicneue.com/) Bold (OFL licensed, see
+`fonts/OFL.txt`). To use another font, put it at `fonts/comic.ttf` or set `FONT_PATH`.
 
 Test page: `python samples/make_sample.py` generates `samples/sample_page.png`
 (synthetic, so there's no copyright issue for demos).
@@ -65,13 +66,16 @@ pytest                 # includes an end-to-end run on the sample page
 
 - [ ] Batch: CBZ/ZIP/PDF upload, split into pages, download as ZIP
 - [ ] LaMa inpainting for text over artwork
-- [ ] Manga-specific bubble detector (comic-text-detector / fine-tuned YOLO)
+- [x] Manga-specific text detector (comic-text-detector)
+- [x] Claude reads bubble images (vision) instead of trusting OCR
+- [x] Translation styles + glossary
 - [ ] Context across pages (previous page's dialogue in the prompt)
 - [ ] Drag/resize text boxes in the editor
 - [ ] Docker + deploy (backend on a GPU host, frontend static)
 
 ## Known limitations
 
-- EasyOCR is weak on stylized or vertical Japanese. Install manga-ocr for real pages.
+- Without an API key, translations are placeholders and the source text is EasyOCR's
+  guess, which is weak on manga lettering. With a key, Claude reads the bubble images.
 - OpenCV inpainting smears textured backgrounds. LaMa is the fix.
 - Only use pages you have rights to in public demos.

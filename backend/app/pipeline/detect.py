@@ -1,8 +1,12 @@
-"""Step 1: find text lines and group them into speech-bubble regions.
+"""Step 1: find the text regions (speech bubbles, captions) on a page.
 
-Uses EasyOCR's CRAFT text detector. Nearby line boxes are merged into one region,
-so a bubble with three vertical columns becomes one TextRegion.
+Two detectors:
+- "ctd" (default): comic-text-detector, trained on manga. Finds whole text blocks
+  and also gives a pixel mask of the lettering. See ctd.py.
+- "easyocr" (fallback): EasyOCR's generic CRAFT detector. Finds lines, which we merge
+  into bubbles by proximity. Misses a lot of manga lettering.
 """
+import logging
 import threading
 
 import numpy as np
@@ -10,6 +14,7 @@ import numpy as np
 from .. import config
 from .models import Box, TextRegion, union
 
+log = logging.getLogger(__name__)
 _readers: dict[str, object] = {}
 _lock = threading.Lock()
 
@@ -102,45 +107,93 @@ def ink_runs(profile: np.ndarray, min_gap: int) -> list[tuple[int, int]]:
     return runs
 
 
-def split_columns(img: np.ndarray, box: Box) -> list[Box] | None:
-    """If the region holds vertical text, return one box per column (right to left).
+def split_columns(ink: np.ndarray, box: Box) -> list[Box] | None:
+    """If a region holds vertical text, return one box per column (right to left).
 
-    Uses a vertical projection of dark pixels: columns of text are separated by blank strips.
+    `ink` is a boolean "text pixel" crop of the region. Columns of text are separated
+    by blank vertical strips, so a vertical projection splits them.
     """
-    import cv2
-
     x1, y1, x2, y2 = box
-    gray = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_RGB2GRAY)
-    ink = gray < 110
     if ink.sum() < 20:
         return None
     est = max(4, min(x2 - x1, y2 - y1) // 12)
-    cols = ink_runs(ink.any(axis=0), min_gap=est)
     boxes = []
-    for a, b in cols:
+    for a, b in ink_runs(ink.any(axis=0), min_gap=est):
         rows = np.where(ink[:, a:b].any(axis=1))[0]
-        if len(rows) == 0:
-            continue
-        boxes.append((x1 + a, y1 + int(rows[0]), x1 + b, y1 + int(rows[-1]) + 1))
+        if len(rows):
+            boxes.append((x1 + a, y1 + int(rows[0]), x1 + b, y1 + int(rows[-1]) + 1))
     if not boxes:
         return None
     tall = all((bb[3] - bb[1]) > 1.6 * (bb[2] - bb[0]) for bb in boxes)
     return sorted(boxes, key=lambda bb: -bb[2]) if tall else None
 
 
-def detect_regions(img: np.ndarray, source_lang: str) -> list[TextRegion]:
-    lines = detect_lines(img, source_lang)
+def _dark_ink(img: np.ndarray, box: Box) -> np.ndarray:
+    import cv2
+    x1, y1, x2, y2 = box
+    return cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_RGB2GRAY) < 110
+
+
+def _regions_easyocr(img: np.ndarray, source_lang: str) -> list[TextRegion]:
+    """Generic detector: find text lines, then merge nearby lines into bubbles."""
     regions = []
-    for group in group_lines(lines):
+    for group in group_lines(detect_lines(img, source_lang)):
         box = union(group)
         vertical = False
-        # Japanese/Chinese bubbles are usually vertical columns read right-to-left
         if source_lang in ("ja", "zh"):
-            cols = split_columns(img, box)
+            cols = split_columns(_dark_ink(img, box), box)
             if cols:
                 group, vertical = cols, True
         regions.append(TextRegion(id=0, box=union(group), line_boxes=group, vertical=vertical))
+    return regions
+
+
+def _regions_ctd(img: np.ndarray, source_lang: str) -> tuple[list[TextRegion], np.ndarray]:
+    """Manga-trained detector: it already returns one box per text block."""
+    from . import ctd
+
+    boxes, mask = ctd.detect(img)
+    regions = []
+    for box in boxes:
+        x1, y1, x2, y2 = box
+        ink = mask[y1:y2, x1:x2] > 0
+        cols = split_columns(ink, box) if source_lang in ("ja", "zh") else None
+        # Japanese/Chinese blocks are vertical unless clearly wider than tall
+        vertical = source_lang in ("ja", "zh") and (cols is not None or (y2 - y1) >= 0.8 * (x2 - x1))
+        regions.append(TextRegion(id=0, box=box, line_boxes=cols or [box], vertical=vertical))
+    return regions, mask
+
+
+def _overlaps(a: Box, b: Box, frac: float = 0.3) -> bool:
+    """True if the overlap covers more than `frac` of the smaller box."""
+    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return smaller > 0 and ix * iy > frac * smaller
+
+
+def detect_regions(img: np.ndarray, source_lang: str) -> tuple[list[TextRegion], np.ndarray | None]:
+    """Find text regions in reading order.
+
+    Returns (regions, text_mask). text_mask is None when the fallback detector is used.
+    """
+    mask = None
+    if config.DETECTOR == "ctd":
+        try:
+            regions, mask = _regions_ctd(img, source_lang)
+            # Safety net: the manga detector sometimes skips small captions. Add anything
+            # the generic detector finds that doesn't overlap a block we already have.
+            # (Non-text hits are dropped later: OCR finds nothing / Claude returns "".)
+            extra = [r for r in _regions_easyocr(img, source_lang)
+                     if not any(_overlaps(r.box, c.box) for c in regions)]
+            regions += extra
+        except Exception as e:  # model download blocked, onnxruntime missing, ...
+            log.warning("Manga text detector unavailable (%s); falling back to EasyOCR", e)
+            regions = _regions_easyocr(img, source_lang)
+    else:
+        regions = _regions_easyocr(img, source_lang)
+
     ordered = reading_order(regions, img.shape[0], rtl=source_lang in ("ja", "zh"))
     for i, r in enumerate(ordered):
         r.id = i
-    return ordered
+    return ordered, mask

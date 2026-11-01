@@ -4,6 +4,7 @@ python-multipart>=0.0.9
 anthropic>=0.40
 easyocr>=1.7          # pulls in torch; text detection + fallback OCR
 opencv-python-headless>=4.9
+onnxruntime>=1.17   # runs the manga text detector
 pillow>=10.0
 numpy>=1.26
 python-dotenv>=1.0

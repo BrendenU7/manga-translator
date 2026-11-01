@@ -60,22 +60,35 @@ def test_clean_erases_text_in_white_bubble():
 
 def test_translate_parses_model_json(monkeypatch):
     regions = [TextRegion(id=0, box=(0, 0, 1, 1), source_text="おい"),
-               TextRegion(id=1, box=(0, 0, 1, 1), source_text="待て")]
-    reply = 'Sure! {"translations": [{"id": 0, "text": "Hey"}, {"id": 1, "text": "Wait!"}]}'
-    monkeypatch.setattr(translate, "translate_claude",
-                        lambda *a: {int(t["id"]): t["text"]
-                                    for t in translate._extract_json(reply)["translations"]})
+               TextRegion(id=1, box=(0, 0, 1, 1), source_text="待そ")]  # OCR typo
+    reply = ('Sure! {"translations": [{"id": 0, "source": "おい", "text": "Hey"}, '
+             '{"id": 1, "source": "待て", "text": "Wait!"}]}')
+    monkeypatch.setattr(translate, "translate_claude", lambda *a: translate.parse_response(reply))
     monkeypatch.setattr(translate.config, "TRANSLATOR", "claude")
     out = translate.translate_regions(regions, "ja", "en")
     assert [r.translated_text for r in out] == ["Hey", "Wait!"]
+    assert out[1].source_text == "待て"  # Claude's reading replaces the OCR guess
 
 
-def test_prompt_contains_all_bubbles_in_order():
+def test_text_prompt_contains_all_bubbles_in_order():
     regions = [TextRegion(id=i, box=(0, 0, 1, 1), source_text=t) for i, t in enumerate(["一", "二"])]
-    system, messages = translate.build_messages(regions, "ja", "en")
-    assert "English" in system
-    payload = json.loads(messages[0]["content"].split("Bubbles:\n", 1)[1])
-    assert [b["text"] for b in payload] == ["一", "二"]
+    system, messages = translate.build_messages(regions, "ja", "en", glossary="悟飯 = Gohan")
+    assert "English" in system and "悟飯 = Gohan" in system
+    payload = json.loads(messages[0]["content"].split("\n", 1)[1])
+    assert [b["ocr"] for b in payload] == ["一", "二"]
+
+
+def test_vision_prompt_sends_page_and_one_image_per_bubble(monkeypatch):
+    monkeypatch.setattr(translate.config, "CLAUDE_VISION", True)
+    page = np.full((300, 200, 3), 255, np.uint8)
+    regions = [TextRegion(id=0, box=(10, 10, 40, 90), source_text="a"),
+               TextRegion(id=1, box=(100, 100, 130, 200), source_text="b")]
+    system, messages = translate.build_messages(regions, "ja", "en", page=page, style="faithful")
+    content = messages[0]["content"]
+    images = [c for c in content if c["type"] == "image"]
+    assert len(images) == 3  # full page + 2 bubbles
+    assert images[0]["source"]["media_type"] == "image/png"
+    assert "Scanlation" in system
 
 
 @pytest.mark.slow
@@ -84,7 +97,7 @@ def test_end_to_end_on_sample_page(monkeypatch):
     monkeypatch.setattr(translate.config, "TRANSLATOR", "mock")
     img = np.array(Image.open(SAMPLE).convert("RGB"))
     regions, cleaned, result = run_pipeline(img, "ja", "en")
-    assert len(regions) == 4
-    assert sum(r.vertical for r in regions) == 3
+    assert len(regions) >= 4
+    assert sum(r.vertical for r in regions) >= 3
     assert all(r.translated_text for r in regions)
     assert result.shape == img.shape

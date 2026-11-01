@@ -45,6 +45,8 @@ $("#translate-btn").addEventListener("click", async () => {
   form.append("file", file);
   form.append("source_lang", $("#source-lang").value);
   form.append("target_lang", $("#target-lang").value);
+  form.append("style", $("#style").value);
+  form.append("glossary", $("#glossary").value);
   $("#translate-btn").disabled = true;
   $("#result-panel").hidden = true;
   $("#error").hidden = true;

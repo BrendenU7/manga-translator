@@ -58,3 +58,7 @@ figcaption { text-align: center; color: var(--muted); font-size: 12px; padding-t
   .bubble { grid-template-columns: 32px 1fr; }
   .bubble textarea { grid-column: 2; }
 }
+
+.glossary { margin-top: 12px; }
+.glossary summary { cursor: pointer; font-weight: 600; }
+.glossary textarea { width: 100%; margin-top: 8px; font-family: inherit; }

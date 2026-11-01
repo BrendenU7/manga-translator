@@ -98,8 +98,13 @@ def read_region(img: np.ndarray, region: TextRegion, source_lang: str) -> str:
     return _easyocr_lines(img, region, source_lang)
 
 
-def read_regions(img: np.ndarray, regions: list[TextRegion], source_lang: str) -> list[TextRegion]:
+def read_regions(img: np.ndarray, regions: list[TextRegion], source_lang: str,
+                 keep_empty: bool = False) -> list[TextRegion]:
+    """OCR every region.
+
+    Regions where OCR found nothing are usually false detections on artwork, so they're
+    dropped, unless keep_empty is set (Claude will look at the image and decide).
+    """
     for r in regions:
         r.source_text = read_region(img, r, source_lang)
-    # Drop regions where OCR found nothing (usually false detections on artwork)
-    return [r for r in regions if r.source_text]
+    return regions if keep_empty else [r for r in regions if r.source_text]

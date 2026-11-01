@@ -22,11 +22,24 @@ TRANSLATOR = os.getenv("TRANSLATOR", "claude" if ANTHROPIC_API_KEY else "mock")
 _FONT_CANDIDATES = [
     os.getenv("FONT_PATH", ""),
     str(ROOT / "fonts" / "comic.ttf"),
+    str(ROOT / "fonts" / "ComicNeue-Bold.ttf"),   # bundled, OFL licensed
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/Library/Fonts/Arial Bold.ttf",
     "C:/Windows/Fonts/arialbd.ttf",
 ]
 FONT_PATH = next((p for p in _FONT_CANDIDATES if p and Path(p).exists()), "")
+
+# Draw translations in ALL CAPS, like English manga lettering
+UPPERCASE_TEXT = os.getenv("UPPERCASE_TEXT", "1") == "1"
+
+# Text detector: "ctd" = manga-trained comic-text-detector (downloads ~95 MB once),
+# "easyocr" = generic detector (worse on manga, but no extra download)
+DETECTOR = os.getenv("DETECTOR", "ctd")
+CTD_MODEL_PATH = Path(os.getenv("CTD_MODEL_PATH", ROOT / "models" / "comictextdetector.pt.onnx"))
+CTD_THREADS = int(os.getenv("CTD_THREADS", "0"))  # 0 = use all CPU cores
+
+# Send Claude an image of each bubble so it can read the text itself, not just the OCR guess
+CLAUDE_VISION = os.getenv("CLAUDE_VISION", "1") == "1"
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
 USE_GPU = os.getenv("USE_GPU", "0") == "1"

@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config, jobs
+from .pipeline.translate import STYLES
 
 logging.basicConfig(level=logging.INFO)
 config.DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -41,21 +42,27 @@ def get_config():
         "source_langs": config.SOURCE_LANGS,
         "target_langs": config.TARGET_LANGS,
         "translator": config.TRANSLATOR,
+        "styles": list(STYLES),
     }
 
 
 @app.post("/api/jobs")
 async def create_job(file: UploadFile = File(...),
                      source_lang: str = Form("ja"),
-                     target_lang: str = Form("en")):
+                     target_lang: str = Form("en"),
+                     style: str = Form("standard"),
+                     glossary: str = Form("")):
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(400, f"Unsupported file type: {file.content_type}")
     if source_lang not in config.SOURCE_LANGS or target_lang not in config.TARGET_LANGS:
         raise HTTPException(400, "Unsupported language")
+    if style not in STYLES:
+        raise HTTPException(400, "Unsupported style")
     data = await file.read()
     if len(data) > config.MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(413, f"File larger than {config.MAX_UPLOAD_MB} MB")
-    job = jobs.create_job(data, file.filename or "page.png", source_lang, target_lang)
+    job = jobs.create_job(data, file.filename or "page.png", source_lang, target_lang,
+                          style=style, glossary=glossary[:2000])
     return _job_json(job)
 
 
