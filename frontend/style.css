@@ -391,3 +391,18 @@ main.results { max-width: 1000px; }
 .progress-card.stopped .pc-icon { background: color-mix(in srgb, #e8590c 14%, transparent); color: #e8590c; }
 .progress-card.stopped #bar-fill { background: #e8590c; }
 .chip.paused { color: var(--muted); border-style: dashed; cursor: pointer; }
+
+/* Phones: nothing may be wider than the screen */
+@media (max-width: 600px) {
+  header { flex-wrap: wrap; gap: 8px 12px; padding: 14px 16px 4px; }
+  .brand { font-size: 19px; }
+  .header-right { margin-left: auto; }
+  nav { order: 3; width: 100%; }               /* tabs get their own row under the logo */
+  main { padding: 12px 12px 48px; }
+  .card { padding: 14px; }
+  select, input, textarea { max-width: 100%; min-width: 0; }
+  .controls > label { min-width: 0; max-width: 100%; }   /* let long dropdowns shrink */
+  #user-name { display: none; }                          /* keep logo + Log out on one row */
+  .seg { overflow-x: auto; max-width: 100%; }   /* Original / Translated / Compare / Side by side */
+  .seg button { white-space: nowrap; }
+}
