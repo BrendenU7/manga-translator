@@ -250,10 +250,54 @@ def test_stop_skips_pages_not_started_and_retry_resumes(client, monkeypatch):
     finally:
         gate.set()  # never leave workers blocked for the other tests
     batch = wait_for(client, f"/api/batches/{batch['id']}")
-    assert batch["failed"] == stopped and batch["done"] == 6 - stopped
+    # (this fake never reaches a step boundary, so pages already running still finish)
+    assert batch["failed"] >= 1 and batch["done"] + batch["failed"] == 6
+    done_before = batch["done"]
     page = next(p for p in batch["pages"] if p["status"] == "error")
     assert "Stopped" in client.get(f"/api/jobs/{page['id']}").json()["error"]
 
     client.post(f"/api/jobs/{page['id']}/retry")   # resume one
     batch = wait_for(client, f"/api/batches/{batch['id']}")
-    assert batch["done"] == 6 - stopped + 1
+    assert batch["done"] == done_before + 1
+
+
+def test_stop_also_halts_pages_in_progress(client, monkeypatch):
+    import threading
+    gate = threading.Event()
+
+    def stepwise(img, source_lang, target_lang, progress, **kw):
+        progress("detecting")
+        gate.wait(5)               # stopped while "running"...
+        progress("translating")    # ...it must not get past the next step
+        return [], img, np.zeros_like(img)
+
+    monkeypatch.setattr(jobs, "run_pipeline", stepwise)
+    files = [("files", ("p1.png", png_bytes(), "image/png"))]
+    batch = client.post("/api/batches", files=files).json()
+    try:
+        wait_for(client, f"/api/batches/{batch['id']}",
+                 done=lambda b: b["pages"][0]["status"] == "running")
+        assert client.post(f"/api/batches/{batch['id']}/stop").json()["stopped"] == 1
+    finally:
+        gate.set()
+    batch = wait_for(client, f"/api/batches/{batch['id']}")
+    assert batch["failed"] == 1 and batch["done"] == 0
+    assert "Stopped" in client.get(f"/api/jobs/{batch['pages'][0]['id']}").json()["error"]
+
+
+def test_stopped_pages_are_reported_separately(client, monkeypatch):
+    import threading
+    gate = threading.Event()
+    monkeypatch.setattr(jobs, "run_pipeline",
+                        lambda img, *a, **k: (gate.wait(5), ([], img, np.zeros_like(img)))[1])
+    files = [("files", (f"p{i}.png", png_bytes(), "image/png")) for i in range(5)]
+    batch = client.post("/api/batches", files=files).json()
+    try:
+        wait_for(client, f"/api/batches/{batch['id']}",
+                 done=lambda b: any(p["status"] == "running" for p in b["pages"]))
+        client.post(f"/api/batches/{batch['id']}/stop")
+    finally:
+        gate.set()
+    batch = wait_for(client, f"/api/batches/{batch['id']}")
+    assert batch["stopped"] >= 1 and batch["stopped"] == batch["failed"]
+    assert all(p["stopped"] for p in batch["pages"] if p["status"] == "error")

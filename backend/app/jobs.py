@@ -40,6 +40,10 @@ _batches: dict[str, "Batch"] = {}
 _deleted: set[str] = set()   # job ids deleted while queued/running: skip or discard their work
 _stopped: set[str] = set()   # queued job ids the user stopped: skip them when their turn comes
 STOPPED_MESSAGE = "Stopped before it was translated. Use Retry to translate it."
+
+
+class JobStopped(Exception):
+    """Raised at the next step boundary of a page the user stopped mid-way."""
 _lock = threading.RLock()
 
 ID_RE = re.compile(r"^[0-9a-f]{12}$")
@@ -201,6 +205,10 @@ def friendly_error(e: Exception) -> str:
 
 def _run(job: Job, context: PageContext | None = None, earlier_usage: dict | None = None):
     def progress(stage: str):
+        # Each step starts here, so a stopped page quits before its next step
+        # (a Claude request already in flight still completes and is billed)
+        if job.id in _stopped:
+            raise JobStopped()
         job.stage = stage
         job.save()
 
@@ -230,6 +238,9 @@ def _run(job: Job, context: PageContext | None = None, earlier_usage: dict | Non
         Image.fromarray(result).save(job.dir / "translated.png")
         job.regions = [r.to_dict() for r in regions]
         job.status, job.stage = "done", "done"
+    except JobStopped:
+        job.status, job.stage = "error", "error"
+        job.error = job.error or STOPPED_MESSAGE
     except Exception as e:
         if job.id in _deleted:
             return
@@ -401,20 +412,42 @@ def list_batches(owner: int) -> list[Batch]:
     return sorted(batches, key=lambda b: b.created_at, reverse=True)
 
 
+def shutdown():
+    """Called when the server stops (e.g. Ctrl+C): stop all translation work promptly.
+
+    Waiting pages are cancelled and pages in progress stop at their next step, so no
+    more Claude requests are sent (and billed) after the server is gone. They're left
+    marked as interrupted, and "Retry failed" resumes them after a restart.
+    """
+    with _lock:
+        live = [j for j in _jobs.values() if j.status in ("queued", "running")]
+        _stopped.update(j.id for j in live)
+    for job in live:
+        job.status, job.stage = "error", "error"
+        job.error = "Interrupted when the app was stopped. Use Retry to translate it."
+        job.save()
+    _executor.shutdown(wait=False, cancel_futures=True)
+    if live:
+        log.info("Stopped %d page(s) still in progress", len(live))
+
+
 def stop_batch(batch: Batch) -> int:
-    """Stop a batch: pages not started yet are skipped (pages already running finish).
+    """Stop a batch: waiting pages are skipped right away, and pages in progress stop at
+    their next step (detect -> read -> translate -> erase -> letter).
 
     Stopped pages count as failed with a clear message, so "Retry failed" resumes them.
     Returns how many pages were stopped.
     """
     stopped = 0
     for job in batch.pages():
+        if job.status not in ("queued", "running"):
+            continue
+        with _lock:
+            _stopped.add(job.id)
         if job.status == "queued":
-            with _lock:
-                _stopped.add(job.id)
             job.status, job.stage, job.error = "error", "error", STOPPED_MESSAGE
             job.save()
-            stopped += 1
+        stopped += 1
     return stopped
 
 

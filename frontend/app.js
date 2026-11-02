@@ -229,12 +229,18 @@ function renderHead() {
 function renderProgress() {
   const finished = batch.done + batch.failed;
   const done = batch.status === "done";
-  $("#progress-panel").hidden = false;
-  $("#progress-panel").classList.toggle("done", done);
-  $("#pc-icon").textContent = done ? "✓" : "文";
-  $("#pc-title").textContent = done ? "Overall Progress" : "Processing";
-  $("#pc-count").textContent = `${finished}/${batch.total}`;
-  $("#bar-fill").style.width = `${(100 * finished) / batch.total}%`;
+  const errors = batch.failed - (batch.stopped || 0);
+  // done: all good · stopped: some pages were stopped · errors: some pages really failed
+  const state = !done ? "running" : batch.stopped ? "stopped" : errors ? "errors" : "done";
+  const card = $("#progress-panel");
+  card.hidden = false;
+  card.classList.toggle("done", state === "done");
+  card.classList.toggle("stopped", state === "stopped" || state === "errors");
+  $("#pc-icon").textContent = { running: "文", done: "✓", stopped: "⏸", errors: "!" }[state];
+  $("#pc-title").textContent = { running: "Processing", done: "Overall Progress",
+    stopped: "Stopped", errors: "Finished with errors" }[state];
+  $("#pc-count").textContent = `${done ? batch.done : finished}/${batch.total}`;
+  $("#bar-fill").style.width = `${(100 * (done ? batch.done : finished)) / batch.total}%`;
   // "2 Translating · 3 Erasing · 6 Pending"
   const counts = {};
   for (const p of batch.pages) {
@@ -260,12 +266,15 @@ function renderSummary() {
   const show = batch.done + batch.failed > 0;
   $("#summary-card").hidden = !show;
   if (!show) return;
+  const stopped = batch.stopped || 0;
+  const errors = batch.failed - stopped;
   const parts = [`${batch.total} page${batch.total === 1 ? "" : "s"}`, `${batch.done} translated`];
-  if (batch.failed) parts.push(`${batch.failed} failed`);
+  if (stopped) parts.push(`${stopped} stopped`);
+  if (errors) parts.push(`${errors} failed`);
   parts.push(`est. cost ${fmtUsd(batch.cost_usd)}`);
   $("#summary-text").textContent = `🗒 ${parts.join(" · ")}`;
   $("#retry-failed").hidden = !batch.failed;
-  $("#retry-failed").textContent = `↻ Retry failed (${batch.failed})`;
+  $("#retry-failed").textContent = errors ? `↻ Retry failed (${batch.failed})` : `▶ Resume (${stopped})`;
 }
 
 function renderChips() {
@@ -292,6 +301,10 @@ function renderChips() {
       chip.className = "chip done";
       chip.innerHTML = `✓ ${n}`;
       chip.title = `Page ${n}: done (${fmtUsd(p.cost_usd)}). Click to open.`;
+    } else if (p.status === "error" && p.stopped) {
+      chip.className = "chip paused";
+      chip.innerHTML = `⏸ ${n}`;
+      chip.title = `Page ${n}: stopped before it was translated. Resume or click to retry.`;
     } else if (p.status === "error") {
       chip.className = "chip error";
       chip.innerHTML = `! ${n}`;
@@ -464,6 +477,7 @@ $("#again-btn").addEventListener("click", () => retryPage(selectedId, $("#again-
 $("#retry-failed").addEventListener("click", async () => {
   $("#retry-failed").disabled = true;
   for (const p of batch.pages.filter((p) => p.status === "error")) await retryPage(p.id);
+  // (stopped and failed pages alike: resuming a stopped chapter is the same as retrying it)
   $("#retry-failed").disabled = false;
 });
 

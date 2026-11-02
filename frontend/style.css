@@ -381,3 +381,13 @@ main.results { max-width: 1000px; }
 }
 /* Leave room for the toolbar + thumbnail strip above the page */
 #viewer figure img { max-height: calc(100vh - 160px); }
+
+.link-btn.stop { color: #e8590c; }
+.link-btn.stop + .danger { margin-left: 0; }
+.dash-actions .stop { margin-left: auto; }
+
+/* Stopped / finished-with-errors progress card, and stopped page chips */
+.progress-card.stopped { border-color: color-mix(in srgb, #e8590c 45%, transparent); }
+.progress-card.stopped .pc-icon { background: color-mix(in srgb, #e8590c 14%, transparent); color: #e8590c; }
+.progress-card.stopped #bar-fill { background: #e8590c; }
+.chip.paused { color: var(--muted); border-style: dashed; cursor: pointer; }

@@ -27,6 +27,7 @@ config.DATA_DIR.mkdir(parents=True, exist_ok=True)
 async def lifespan(app: FastAPI):
     jobs.start_cleanup_thread()  # auto-delete uploads older than RETENTION_DAYS
     yield
+    jobs.shutdown()  # Ctrl+C: stop translating too, not just the web server
 
 
 app = FastAPI(title="Manga Translator", lifespan=lifespan)
@@ -125,10 +126,16 @@ def _job_json(job: jobs.Job) -> dict:
     return data
 
 
+def _was_stopped(job: jobs.Job) -> bool:
+    """Failed only because it was stopped (by the user, or by shutting the app down)."""
+    return job.status == "error" and job.error.startswith(("Stopped", "Interrupted"))
+
+
 def _batch_json(batch: jobs.Batch) -> dict:
     pages = batch.pages()
     done = sum(p.status == "done" for p in pages)
     failed = sum(p.status == "error" for p in pages)
+    stopped = sum(_was_stopped(p) for p in pages)
     status = "done" if done + failed == len(pages) else "running"
     first = pages[0] if pages else None
     thumb = None
@@ -141,7 +148,8 @@ def _batch_json(batch: jobs.Batch) -> dict:
         "status": status,
         "total": len(pages),
         "done": done,
-        "failed": failed,
+        "failed": failed,                 # includes stopped pages
+        "stopped": stopped,               # failed only because translation was stopped
         "created_at": batch.created_at,
         "expires_at": batch.expires_at,
         "source_lang": batch.source_lang,
@@ -153,7 +161,7 @@ def _batch_json(batch: jobs.Batch) -> dict:
         "thumb_url": thumb,
         "download_url": f"/api/batches/{batch.id}/download",
         "pages": [{"id": p.id, "filename": p.filename, "status": p.status, "stage": p.stage,
-                   "cost_usd": (p.usage or {}).get("cost_usd", 0.0)}
+                   "stopped": _was_stopped(p), "cost_usd": (p.usage or {}).get("cost_usd", 0.0)}
                   for p in pages],
     }
 

@@ -51,11 +51,17 @@ function render(batches) {
         <div class="dash-actions">
           <a class="button" href="/index.html?batch=${b.id}">Open</a>
           <a class="button secondary" href="${b.download_url}" ${b.done ? "" : 'aria-disabled="true"'}>ZIP</a>
+          ${b.status !== "done" ? '<button class="link-btn stop" type="button" title="Stop translating (resume later with Retry failed)">◼ Stop</button>' : ""}
           <button class="link-btn danger" type="button">Delete</button>
         </div>
       </div>`;
     card.querySelector(".dash-name").textContent = b.name;
     card.querySelector(".dash-name").title = b.name;
+    card.querySelector(".stop")?.addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      await fetch(`/api/batches/${b.id}/stop`, { method: "POST" });
+      loadDashboard();
+    });
     card.querySelector(".danger").addEventListener("click", async () => {
       if (!confirmDelete(card)) return;
       await fetch(`/api/batches/${b.id}`, { method: "DELETE" });
