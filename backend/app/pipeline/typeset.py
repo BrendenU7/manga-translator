@@ -46,16 +46,29 @@ def prepare(text: str, target_lang: str) -> str:
     return text.upper()
 
 
-def widen_box(region: TextRegion, others: list[TextRegion], img_w: int) -> Box:
+def _is_blank_column(gray: np.ndarray | None, x: int, y1: int, y2: int) -> bool:
+    """True if this column of the (cleaned) page is almost all paper, not artwork."""
+    if gray is None:
+        return True
+    col = gray[y1:y2, x]
+    return col.size == 0 or np.mean(col > 200) >= 0.97
+
+
+def widen_box(region: TextRegion, others: list[TextRegion], img_w: int,
+              gray: np.ndarray | None = None) -> Box:
     """Give text without a closed bubble more width.
 
     Japanese is set in tall, narrow columns; English needs a wider box. Grow the box
     sideways (centered) until it's about as wide as it is tall, without running into
-    other text regions or off the page.
+    other text regions, off the page, or over artwork: on white paper we only grow
+    into blank columns. Text that sits on artwork only grows a little (its outline
+    would cover the drawing).
     """
     x1, y1, x2, y2 = region.box
     w, h = x2 - x1, y2 - y1
     target = max(w, int(h * 0.9))
+    if not region.on_light_bg:
+        target = min(target, int(w * 1.3))
     if target <= w:
         return region.box
     cx = (x1 + x2) // 2
@@ -70,7 +83,31 @@ def widen_box(region: TextRegion, others: list[TextRegion], img_w: int) -> Box:
             nx1 = max(nx1, ox2 + 4)
         elif ox1 >= x2:
             nx2 = min(nx2, ox1 - 4)
+    if region.on_light_bg and gray is not None:
+        # Walk outward one column at a time and stop at the first one with artwork in it
+        left = x1
+        while left - 1 >= nx1 and _is_blank_column(gray, left - 1, y1, y2):
+            left -= 1
+        right = x2
+        while right < nx2 and _is_blank_column(gray, right, y1, y2):
+            right += 1
+        nx1, nx2 = left, right
     return (min(nx1, x1), y1, max(nx2, x2), y2)
+
+
+def source_font_cap(region: TextRegion) -> int:
+    """Largest sensible font size: about the size of the original lettering.
+
+    A translation drawn much bigger than the text it replaces spills over the art, so
+    use the original character size (column width for vertical text, line height for
+    horizontal) as a ceiling.
+    """
+    if not region.line_boxes:
+        return MAX_FONT
+    sizes = sorted((b[2] - b[0]) if region.vertical else (b[3] - b[1])
+                   for b in region.line_boxes)
+    char = sizes[len(sizes) // 2]  # median, so one odd line can't skew it
+    return int(min(MAX_FONT, max(MIN_FONT + 3, char * 1.2)))
 
 
 def bubble_box(clean_gray: np.ndarray, region: TextRegion,
@@ -82,7 +119,7 @@ def bubble_box(clean_gray: np.ndarray, region: TextRegion,
     """
     x1, y1, x2, y2 = region.box
     others = others or []
-    fallback = widen_box(region, others, clean_gray.shape[1])
+    fallback = widen_box(region, others, clean_gray.shape[1], clean_gray)
     if not region.on_light_bg:
         return fallback
     h, w = clean_gray.shape
@@ -145,9 +182,9 @@ def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int,
     return lines
 
 
-def fit_text(text: str, box: Box, target_lang: str = "en",
-             font_style: str = "manga") -> tuple[ImageFont.FreeTypeFont, list[str], int]:
-    """Largest font size whose wrapped text fits inside box.
+def fit_text(text: str, box: Box, target_lang: str = "en", font_style: str = "manga",
+             max_size: int = MAX_FONT) -> tuple[ImageFont.FreeTypeFont, list[str], int]:
+    """Largest font size (up to max_size) whose wrapped text fits inside box.
 
     Returns (font, display lines, line_height). Lines are already shaped for drawing.
     """
@@ -155,7 +192,7 @@ def fit_text(text: str, box: Box, target_lang: str = "en",
     path = fonts.font_path_for(text, font_style)
     complex_layout = target_lang == "th"
     best = None
-    lo, hi = MIN_FONT, MAX_FONT
+    lo, hi = MIN_FONT, max(MIN_FONT, min(max_size, MAX_FONT))
     while lo <= hi:
         size = (lo + hi) // 2
         font = fonts.load(path, size, complex_layout)
@@ -188,7 +225,8 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
         if r.render_box is None:
             r.render_box = bubble_box(gray, r, regions)
         box = r.render_box
-        font, lines, line_h = fit_text(text, box, target_lang, font_style)
+        font, lines, line_h = fit_text(text, box, target_lang, font_style,
+                                       max_size=source_font_cap(r))
         total_h = line_h * len(lines)
         y = box[1] + ((box[3] - box[1]) - total_h) // 2
         cx = (box[0] + box[2]) / 2

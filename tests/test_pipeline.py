@@ -246,3 +246,21 @@ def test_long_strip_can_stop_between_chunks(monkeypatch):
     except RuntimeError:
         pass
     assert len(calls) == 2  # the third chunk was never sent
+
+
+def test_text_without_bubble_does_not_spread_over_artwork():
+    """Open-paper text next to artwork: the drawing box widens only into blank paper,
+    and the font is capped near the size of the original lettering."""
+    import cv2
+    import importlib
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    img = np.full((330, 300, 3), 255, np.uint8)
+    for x in range(215, 300, 4):
+        cv2.line(img, (x, 40), (x, 330), (40, 40, 40), 2)   # artwork on the right
+    cols = [(95 + i * 26, 60, 117 + i * 26, 270) for i in range(4)]
+    r = TextRegion(id=0, box=(95, 60, 199, 270), line_boxes=cols, vertical=True,
+                   translated_text="Doesn't that mean even you do it all the time?")
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    box = ts.bubble_box(gray, r, [r])
+    assert box[2] <= 214                    # stopped before the artwork
+    assert ts.source_font_cap(r) <= 27      # ~1.2x the 22px original characters
