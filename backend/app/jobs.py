@@ -59,7 +59,18 @@ def _write_json(path: Path, data: dict):
     error mid-write can never leave a half-written or empty file behind."""
     tmp = path.with_suffix(f".{threading.get_ident()}.tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(tmp, path)
+    # On Windows the swap fails with "Access is denied" while anything else has the file
+    # open for a moment (the progress page reading it, antivirus, VS Code's explorer).
+    # That lock lasts milliseconds, so wait briefly and try again instead of failing the page.
+    for attempt in range(20):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 19:
+                tmp.unlink(missing_ok=True)
+                raise
+            time.sleep(0.05)
 
 
 def _read_json(path: Path) -> dict | None:

@@ -54,7 +54,8 @@ def translate_page(img, regions, source_lang, target_lang, style, glossary,
                    quality: str = "economy", usage: dict | None = None) -> list[TextRegion]:
     progress("translating")
     regions = translate_regions(regions, source_lang, target_lang, page=img, style=style,
-                                glossary=glossary, previous=previous, quality=quality, usage=usage)
+                                glossary=glossary, previous=previous, quality=quality, usage=usage,
+                                before_call=lambda: progress("translating"))
     # Claude returns "" for detections that aren't really text: leave those untouched
     regions = [r for r in regions if r.translated_text.strip()]
     for i, r in enumerate(regions):

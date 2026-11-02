@@ -228,3 +228,21 @@ def test_strip_prompt_skips_the_full_page_image(monkeypatch):
     _, messages = translate.build_messages(regions, "ko", "en", page=strip)
     images = [c for c in messages[0]["content"] if c["type"] == "image"]
     assert len(images) == 1  # just the bubble
+
+
+def test_long_strip_can_stop_between_chunks(monkeypatch):
+    """A stop request takes effect between the Claude calls of a long strip."""
+    regions = [TextRegion(id=i, box=(0, i * 10, 10, i * 10 + 5), source_text="x")
+               for i in range(translate.MAX_BUBBLES_PER_CALL * 3)]
+    calls = []
+
+    def before_call():
+        calls.append(1)
+        if len(calls) == 2:
+            raise RuntimeError("stopped")
+
+    try:
+        translate.translate_regions(regions, "ko", "en", before_call=before_call)
+    except RuntimeError:
+        pass
+    assert len(calls) == 2  # the third chunk was never sent

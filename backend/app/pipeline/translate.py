@@ -184,9 +184,12 @@ def translate_mock(regions, source_lang, target_lang, page=None, style="standard
 def translate_regions(regions: list[TextRegion], source_lang: str, target_lang: str,
                       page: np.ndarray | None = None, style: str = "standard",
                       glossary: str = "", previous: list[dict] | None = None,
-                      quality: str = pricing.DEFAULT_QUALITY, usage: dict | None = None) -> list[TextRegion]:
+                      quality: str = pricing.DEFAULT_QUALITY, usage: dict | None = None,
+                      before_call=None) -> list[TextRegion]:
     """previous: dialogue from earlier pages [{"source", "text"}], used as context.
-    quality: "economy" or "best" (see pricing.py). usage: dict that collects tokens and cost."""
+    quality: "economy" or "best" (see pricing.py). usage: dict that collects tokens and cost.
+    before_call: optional function run before each Claude call; it can raise to stop
+    (so Stop/Ctrl+C takes effect between the chunks of a long strip)."""
     if not regions:
         return regions
     fn = translate_claude if config.TRANSLATOR == "claude" else translate_mock
@@ -196,6 +199,8 @@ def translate_regions(regions: list[TextRegion], source_lang: str, target_lang: 
     context = list(previous or [])
     for start in range(0, len(regions), MAX_BUBBLES_PER_CALL):
         chunk = regions[start:start + MAX_BUBBLES_PER_CALL]
+        if before_call:
+            before_call()
         part = fn(chunk, source_lang, target_lang, page, style, glossary, context,
                   quality=quality, usage=usage)
         result.update(part)

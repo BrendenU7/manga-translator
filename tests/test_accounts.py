@@ -218,3 +218,24 @@ def test_saves_are_utf8_and_never_rely_on_the_os_default(app, monkeypatch):
     page = r.json()["pages"][0]["id"]
     raw = (config.DATA_DIR / page / "job.json").read_bytes().decode("utf-8")
     assert "悟飯" in raw
+
+
+def test_save_retries_when_windows_locks_the_file(tmp_path, monkeypatch):
+    """Windows refuses to replace a file another reader has open for a moment
+    ("Access is denied"); the save should wait and retry instead of failing the page."""
+    import os
+    from backend.app import jobs
+    real_replace, calls = os.replace, []
+
+    def flaky_replace(src, dst):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError(5, "Access is denied")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(jobs.os, "replace", flaky_replace)
+    target = tmp_path / "job.json"
+    jobs._write_json(target, {"title": "ページ"})
+    assert jobs._read_json(target) == {"title": "ページ"}
+    assert len(calls) == 3
+    assert not list(tmp_path.glob("*.tmp"))
