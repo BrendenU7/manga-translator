@@ -330,3 +330,37 @@ def test_open_paper_text_stays_off_artwork_inside_a_panel():
                    source_text="あ" * 30, translated_text="Wait, you knew about this the whole time?")
     ts.typeset(img, [r])
     assert r.render_box[2] <= 214
+
+
+def test_cleaning_keeps_bubble_outline_that_touches_the_text_box():
+    import cv2
+    from backend.app.pipeline.clean import clean_regions
+    img = np.full((200, 200, 3), 255, np.uint8)
+    cv2.ellipse(img, (100, 100), (60, 80), 0, 0, 360, (0, 0, 0), 3)   # bubble outline
+    img[60:140, 85:115] = 0                                            # "lettering" block
+    for y in range(62, 140, 8):
+        img[y:y + 3, 85:115] = 255                                     # make it stroke-like
+    box = (82, 18, 118, 150)               # detector box reaching the top of the outline
+    mask = np.zeros((200, 200), np.uint8)
+    mask[60:140, 85:115] = 255
+    r = TextRegion(id=0, box=box, line_boxes=[box])
+    out = clean_regions(img, [r], mask)
+    assert out[60:140, 85:115].min() > 200            # lettering erased
+    assert out[18:24, 95:105].min() < 60               # outline at the top still there
+
+
+def test_page_lettering_size_is_consistent():
+    """Every bubble on a page uses the same standard size unless it's too small for it."""
+    import importlib
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    assert ts.page_font_size((1536, 1024)) == 20
+    assert ts.page_font_size((20000, 800)) == 16          # long strip: by width
+    img = np.full((1536, 1024, 3), 255, np.uint8)
+    big = TextRegion(id=0, box=(100, 100, 400, 500), line_boxes=[(100, 100, 400, 500)],
+                     translated_text="Short line.")
+    small = TextRegion(id=1, box=(600, 100, 700, 300), line_boxes=[(600, 100, 700, 300)],
+                       translated_text="Another short line.")
+    ts.typeset(img, [big, small])
+    sizes = [ts.fit_text(ts.prepare(r.translated_text, "en"), r.render_box,
+                         max_size=min(ts.source_font_cap(r), 20))[0].size for r in (big, small)]
+    assert sizes == [20, 20]

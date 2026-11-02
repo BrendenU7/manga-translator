@@ -66,6 +66,7 @@ def clean_regions(img: np.ndarray, regions: list[TextRegion],
                 # every non-white pixel inside it; outside the box, trust the mask only.
                 patch = gray[box[1]:box[3], box[0]:box[2]]
                 strokes = (m > 0) | ((patch < 215) & _inside(r.box, box, 2))
+                strokes &= ~_runs_off_edge(patch < 215)
                 out[box[1]:box[3], box[0]:box[2]][strokes] = color
             else:
                 inpaint_mask[box[1]:box[3], box[0]:box[2]] |= m
@@ -81,6 +82,7 @@ def clean_regions(img: np.ndarray, regions: list[TextRegion],
                 strokes = (patch < 200).astype(np.uint8)
                 strokes = cv2.dilate(strokes, kernel, iterations=2).astype(bool)
                 strokes &= _inside(lb, box, max(2, size // 8))
+                strokes &= ~_runs_off_edge(patch < 200)
                 out[box[1]:box[3], box[0]:box[2]][strokes] = color
             else:
                 # Mask only pixels that look like text strokes (very dark or very light)
@@ -99,3 +101,17 @@ def _inside(line: Box, box: Box, pad: int) -> np.ndarray:
     m[max(0, line[1] - pad - box[1]):line[3] + pad - box[1],
       max(0, line[0] - pad - box[0]):line[2] + pad - box[0]] = True
     return m
+
+
+def _runs_off_edge(dark: np.ndarray) -> np.ndarray:
+    """Dark shapes that continue past the edge of the patch: a bubble outline or artwork
+    that the text box happens to touch, never lettering (letters sit inside the padded
+    box). Returns their pixels so the eraser can leave them alone."""
+    n, labels = cv2.connectedComponents(dark.astype(np.uint8), connectivity=8)
+    if n <= 1:
+        return np.zeros(dark.shape, bool)
+    edge = np.unique(np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]]))
+    edge = edge[edge != 0]
+    keep = np.isin(labels, edge)
+    # Also protect a couple of pixels around them: anti-aliased edges of the outline
+    return cv2.dilate(keep.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)

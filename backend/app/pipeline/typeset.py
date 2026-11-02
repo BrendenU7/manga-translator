@@ -19,6 +19,11 @@ from . import fonts
 from .models import Box, TextRegion, area
 
 MIN_FONT, MAX_FONT = 9, 64
+# Standard lettering size, as a fraction of the page size. Professional scanlations (and
+# ai-manga-translator) letter every bubble on a page at about the same size, shrinking only
+# bubbles that are too small; filling each bubble with the biggest text that fits looks
+# uneven and spills over the art. ~1/50 of the page width = ~20px on a 1024px page.
+PAGE_FONT_RATIO = 1 / 50
 
 # Characters that shouldn't start a line in CJK text (closing punctuation, small kana...)
 NO_LINE_START = set("、。，．・：；？！…‥ー）」』】〉》〕！？ぁぃぅぇぉっゃゅょァィゥェォッャュョ")
@@ -214,12 +219,21 @@ def bubble_box(clean_gray: np.ndarray, region: TextRegion,
         candidates.append((cx - half_w, gy1, cx + half_w, gy2))
     if not text:
         return max(candidates, key=area)
-    cap = source_font_cap(region)
+    cap = min(source_font_cap(region), page_font_size(clean_gray.shape))
 
     def score(b):
         font, _, _ = fit_text(text, b, target_lang, font_style, max_size=cap)
         return (font.size, area(b))
     return max(candidates, key=score)
+
+
+def page_font_size(shape: tuple) -> int:
+    """The page's standard lettering size. Uses the shorter of width and height/1.45
+    (a normal page is ~1.45x taller than wide), so double-page spreads and long webtoon
+    strips get the same size as a single page of the same width."""
+    h, w = shape[:2]
+    ref = min(w, h / 1.45)
+    return int(min(MAX_FONT, max(MIN_FONT + 3, round(ref * PAGE_FONT_RATIO))))
 
 
 def _units(paragraph: str, per_char: bool) -> list[tuple[str, str]]:
@@ -286,8 +300,31 @@ def fit_text(text: str, box: Box, target_lang: str = "en", font_style: str = "ma
     if best is None:  # doesn't fit even at the minimum size; draw small anyway
         font = fonts.load(path, MIN_FONT, complex_layout)
         lines = [shape(line, target_lang) for line in wrap_text(text, font, bw, target_lang)]
-        best = (font, lines, int(MIN_FONT * 1.15))
-    return best
+        return font, lines, int(MIN_FONT * 1.15)
+    return _balance(text, best, bw, bh, target_lang)
+
+
+def _balance(text: str, fitted, bw: int, bh: int, target_lang: str):
+    """Rewrap into even lines, the way letterers do.
+
+    With a standard font size the text is often smaller than the bubble, and wrapping at
+    the full width gives one long line and a short leftover ("MOCK TRANSLATION FOR /
+    BUBBLE"). Instead: use the fewest lines that fill about 3/4 of the width, then make
+    them equally long. Only used if it still fits the box.
+    """
+    font, lines, line_h = fitted
+    total = font.getlength(shape(" ".join(text.split()), target_lang))
+    n = max(1, int(np.ceil(total / (0.75 * bw))))
+    width = total / n * 1.08  # a little slack so words don't spill onto an extra line
+    for _ in range(12):  # widen step by step until it fits
+        wrapped = [shape(line, target_lang) for line in wrap_text(text, font, int(width), target_lang)]
+        widest = max((font.getlength(line) for line in wrapped), default=0)
+        if widest <= bw and line_h * len(wrapped) <= bh:
+            return font, wrapped, line_h
+        if width >= bw:
+            break
+        width = min(bw, width * 1.12)
+    return fitted
 
 
 def _overlaps(a: Box, b: Box) -> bool:
@@ -335,6 +372,7 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
     draw = ImageDraw.Draw(pil)
     gray = cv2.cvtColor(clean_img, cv2.COLOR_RGB2GRAY)
 
+    page_size = page_font_size(clean_img.shape)
     # Work out every drawing box first, so neighbours can be kept apart
     drawn = [r for r in regions if r.translated_text.strip()]
     paper = paper_mask(gray) if any(r.render_box is None for r in drawn) else None
@@ -348,7 +386,7 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
         text = prepare(r.translated_text.strip(), target_lang)
         box = r.render_box
         font, lines, line_h = fit_text(text, box, target_lang, font_style,
-                                       max_size=source_font_cap(r))
+                                       max_size=min(source_font_cap(r), page_size))
         total_h = line_h * len(lines)
         y = box[1] + ((box[3] - box[1]) - total_h) // 2
         cx = (box[0] + box[2]) / 2
