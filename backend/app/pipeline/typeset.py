@@ -99,48 +99,127 @@ def source_font_cap(region: TextRegion) -> int:
     """Largest sensible font size: about the size of the original lettering.
 
     A translation drawn much bigger than the text it replaces spills over the art, so
-    use the original character size (column width for vertical text, line height for
-    horizontal) as a ceiling.
+    the original character size is used as a ceiling. Two estimates, take the smaller:
+    - line size: column width (vertical) or line height (horizontal), when the detector
+      split the block into lines. If it didn't, the one "line" is the whole block.
+    - area per character: a block of N characters of size c covers about N * c^2,
+      so c ~ sqrt(area / N). Works even when the lines weren't split.
     """
-    if not region.line_boxes:
+    estimates = []
+    real_lines = [b for b in region.line_boxes if b != region.box] or (
+        region.line_boxes if len(region.line_boxes) > 1 else [])
+    if real_lines:
+        sizes = sorted((b[2] - b[0]) if region.vertical else (b[3] - b[1]) for b in real_lines)
+        estimates.append(sizes[len(sizes) // 2])  # median, so one odd line can't skew it
+    n_chars = sum(1 for ch in region.source_text if not ch.isspace())
+    if n_chars:
+        estimates.append((area(region.box) / n_chars) ** 0.5)
+    if not estimates:
         return MAX_FONT
-    sizes = sorted((b[2] - b[0]) if region.vertical else (b[3] - b[1])
-                   for b in region.line_boxes)
-    char = sizes[len(sizes) // 2]  # median, so one odd line can't skew it
-    return int(min(MAX_FONT, max(MIN_FONT + 3, char * 1.2)))
+    return int(min(MAX_FONT, max(MIN_FONT + 3, min(estimates) * 1.2)))
+
+
+def _grow_inside(mask: np.ndarray, box: Box, max_w: int, max_h: int) -> Box:
+    """Grow box one pixel at a time on each side while the new edge stays inside mask
+    (the bubble's white interior), up to max_w x max_h. Widening goes first, because
+    translations need width more than height. Result: a rectangle that fits inside the
+    bubble's real shape, not the rectangle around it (which would include artwork)."""
+    h, w = mask.shape
+    x1, y1, x2, y2 = box
+
+    def ok(line):  # a new edge may touch a few stray dark pixels, not more
+        return line.size > 0 and np.mean(line) >= 0.97
+
+    for horizontal in (True, False):
+        moved = True
+        while moved:
+            moved = False
+            if horizontal and x2 - x1 < max_w:
+                if x1 > 0 and ok(mask[y1:y2, x1 - 1]):
+                    x1 -= 1; moved = True
+                if x2 < w and x2 - x1 < max_w and ok(mask[y1:y2, x2]):
+                    x2 += 1; moved = True
+            if not horizontal and y2 - y1 < max_h:
+                if y1 > 0 and ok(mask[y1 - 1, x1:x2]):
+                    y1 -= 1; moved = True
+                if y2 < h and y2 - y1 < max_h and ok(mask[y2, x1:x2]):
+                    y2 += 1; moved = True
+    return (x1, y1, x2, y2)
+
+
+def paper_mask(gray: np.ndarray) -> np.ndarray:
+    """1 where the page is blank paper. Tiny dark specks (dust, leftovers of the erased
+    text) count as paper: they aren't artwork."""
+    paper = (gray > 200).astype(np.uint8)
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(1 - paper, connectivity=8)
+    small = np.nonzero(stats[:, cv2.CC_STAT_AREA] < 40)[0]
+    small = small[small != 0]  # label 0 is the paper itself
+    paper[np.isin(labels, small)] = 1
+    return paper
 
 
 def bubble_box(clean_gray: np.ndarray, region: TextRegion,
-               others: list[TextRegion] | None = None) -> Box:
+               others: list[TextRegion] | None = None, text: str | None = None,
+               target_lang: str = "en", font_style: str = "manga",
+               paper: np.ndarray | None = None) -> Box:
     """Where to draw the translation for a region.
 
-    For text in a white bubble: flood-fill the bubble to find its interior, shrunk to
-    stay off the outline. If there's no closed bubble, widen the text's own box.
+    Text on white (a bubble, or open paper): find the white area the text sat in and
+    grow the text's box inside it, so the result never covers outlines or artwork, even
+    when the bubble isn't fully closed. Text on artwork keeps (about) its own box.
     """
-    x1, y1, x2, y2 = region.box
     others = others or []
-    fallback = widen_box(region, others, clean_gray.shape[1], clean_gray)
     if not region.on_light_bg:
-        return fallback
+        return widen_box(region, others, clean_gray.shape[1], clean_gray)
     h, w = clean_gray.shape
-    binary = (clean_gray > 200).astype(np.uint8)
+    x1, y1, x2, y2 = region.box
+    x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
+    if x2 - x1 < 2 or y2 - y1 < 2:
+        return region.box
+    if paper is None:  # typeset() computes it once per page and passes it in
+        paper = paper_mask(clean_gray)
+    # The erased text area is white now; flood from it to get the connected white space
     seed = ((x1 + x2) // 2, (y1 + y2) // 2)
-    if binary[seed[1], seed[0]] == 0:
-        return fallback
-    mask = np.zeros((h + 2, w + 2), np.uint8)
-    _, _, _, rect = cv2.floodFill(binary.copy(), mask, seed, 2, flags=4 | (255 << 8))
-    bx, by, bw, bh = rect
-    touches_edge = bx <= 0 or by <= 0 or bx + bw >= w or by + bh >= h
-    if touches_edge or bw * bh > 15 * area(region.box):
-        return fallback  # leaked into the page background; don't trust it
-    # A rectangle inscribed in an ellipse covers ~70% of its width/height
-    sx, sy = int(bw * 0.15), int(bh * 0.15)
-    inner = (min(bx + sx, x1), min(by + sy, y1), max(bx + bw - sx, x2), max(by + bh - sy, y2))
-    # Still too narrow for English? Widen toward the fallback, but stay inside the bubble
-    if fallback[2] - fallback[0] > inner[2] - inner[0]:
-        inner = (max(min(inner[0], fallback[0]), bx + 2), inner[1],
-                 min(max(inner[2], fallback[2]), bx + bw - 2), inner[3])
-    return inner
+    if not paper[seed[1], seed[0]]:
+        ys, xs = np.nonzero(paper[y1:y2, x1:x2])
+        if not len(xs):
+            return region.box
+        seed = (x1 + int(xs[len(xs) // 2]), y1 + int(ys[len(ys) // 2]))
+    fill = np.zeros((h + 2, w + 2), np.uint8)
+    cv2.floodFill(paper.copy(), fill, seed, 2, flags=4 | (255 << 8) | cv2.FLOODFILL_MASK_ONLY)
+    inside = fill[1:-1, 1:-1] > 0
+    # Keep a little air between the text and the bubble outline / artwork
+    inside = cv2.erode(inside.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+    # Other text blocks are off limits (they get their own space)
+    for o in others:
+        if o is not region:
+            ox1, oy1, ox2, oy2 = o.box
+            inside[max(0, oy1 - 4):oy2 + 4, max(0, ox1 - 4):ox2 + 4] = False
+    bw, bh = x2 - x1, y2 - y1
+    # English wants a wider shape than tall Japanese columns; don't drift far though
+    max_w = max(int(bw * 1.8), int(bh * 1.1))
+    max_h = int(bh * 1.4)
+    # Round bubbles are narrow at the top and bottom, so a box as tall as the original
+    # text often can't widen at all. Try shorter (centered) starting boxes too, and keep
+    # the one where the translation fits at the largest size.
+    cy = (y1 + y2) // 2
+    candidates = []
+    for keep in (1.0, 0.85, 0.7, 0.55):
+        half = max(1, int(bh * keep) // 2)
+        start = (x1, max(y1, cy - half), x2, min(y2, cy + half))
+        gx1, gy1, gx2, gy2 = _grow_inside(inside, start, max_w, max_h)
+        # Keep it centered on the original text (it may have grown more on one side)
+        cx = (x1 + x2) // 2
+        half_w = max(1, min(cx - gx1, gx2 - cx))
+        candidates.append((cx - half_w, gy1, cx + half_w, gy2))
+    if not text:
+        return max(candidates, key=area)
+    cap = source_font_cap(region)
+
+    def score(b):
+        font, _, _ = fit_text(text, b, target_lang, font_style, max_size=cap)
+        return (font.size, area(b))
+    return max(candidates, key=score)
 
 
 def _units(paragraph: str, per_char: bool) -> list[tuple[str, str]]:
@@ -258,9 +337,11 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
 
     # Work out every drawing box first, so neighbours can be kept apart
     drawn = [r for r in regions if r.translated_text.strip()]
+    paper = paper_mask(gray) if any(r.render_box is None for r in drawn) else None
     for r in drawn:
         if r.render_box is None:
-            r.render_box = bubble_box(gray, r, regions)
+            r.render_box = bubble_box(gray, r, regions, prepare(r.translated_text.strip(), target_lang),
+                                      target_lang, font_style, paper)
     separate_boxes(drawn)
 
     for r in drawn:

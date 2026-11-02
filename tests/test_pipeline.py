@@ -305,3 +305,28 @@ def test_sound_effects_are_left_untouched(monkeypatch):
     _, out = pipeline.finish_page(img, kept, None, "en", lambda s: None)
     assert np.array_equal(out[120:180, 180:280], img[120:180, 180:280])  # SFX unchanged
     assert not np.array_equal(out[40:60, 20:80], img[40:60, 20:80])      # dialogue replaced
+
+
+def test_font_cap_works_when_columns_were_not_split():
+    """If the detector returns one box for a whole block, the cap uses area per character."""
+    import importlib
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    box = (90, 90, 190, 230)
+    r = TextRegion(id=0, box=box, line_boxes=[box], vertical=True, source_text="あ" * 60)
+    assert ts.source_font_cap(r) <= 20   # ~15px lettering, not the 100px-wide block
+
+
+def test_open_paper_text_stays_off_artwork_inside_a_panel():
+    """Inside a panel border the flood fill covers the whole panel: the box must still
+    stop at the artwork rather than use the rectangle around the white area."""
+    import importlib, cv2
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    img = np.full((340, 300, 3), 255, np.uint8)
+    cv2.rectangle(img, (2, 2), (297, 337), (0, 0, 0), 3)
+    for x in range(215, 300, 4):
+        cv2.line(img, (x, 40), (x, 340), (40, 40, 40), 2)
+    cols = [(95 + i * 26, 60, 117 + i * 26, 270) for i in range(4)]
+    r = TextRegion(id=0, box=(95, 60, 199, 270), line_boxes=cols, vertical=True,
+                   source_text="あ" * 30, translated_text="Wait, you knew about this the whole time?")
+    ts.typeset(img, [r])
+    assert r.render_box[2] <= 214
