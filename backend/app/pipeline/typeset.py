@@ -211,19 +211,60 @@ def fit_text(text: str, box: Box, target_lang: str = "en", font_style: str = "ma
     return best
 
 
+def _overlaps(a: Box, b: Box) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def separate_boxes(regions: list[TextRegion]) -> None:
+    """Make sure no two drawing boxes overlap.
+
+    Two text blocks in the same white area (or one bubble shared by two lines of
+    dialogue) each find the same empty space and would draw on top of each other.
+    Split the space between them: the border goes halfway across the gap between
+    their original text, so each keeps the side it started on.
+    """
+    for i, a in enumerate(regions):
+        for b in regions[i + 1:]:
+            if a.render_box is None or b.render_box is None:
+                continue
+            if not _overlaps(a.render_box, b.render_box):
+                continue
+            ra, rb = list(a.render_box), list(b.render_box)
+            oa, ob = a.box, b.box
+            gap_x = max(ob[0] - oa[2], oa[0] - ob[2])   # space between the original texts
+            gap_y = max(ob[1] - oa[3], oa[1] - ob[3])
+            if gap_x >= 0 and gap_x >= gap_y:            # side by side: split left/right
+                left, right = (ra, rb) if oa[0] < ob[0] else (rb, ra)
+                lo, ro = (oa, ob) if oa[0] < ob[0] else (ob, oa)
+                mid = (lo[2] + ro[0]) // 2
+                left[2] = min(left[2], max(lo[2], mid - 2))
+                right[0] = max(right[0], min(ro[0], mid + 2))
+            elif gap_y >= 0:                             # stacked: split top/bottom
+                top, bottom = (ra, rb) if oa[1] < ob[1] else (rb, ra)
+                to, bo = (oa, ob) if oa[1] < ob[1] else (ob, oa)
+                mid = (to[3] + bo[1]) // 2
+                top[3] = min(top[3], max(to[3], mid - 2))
+                bottom[1] = max(bottom[1], min(bo[1], mid + 2))
+            else:                                        # original texts overlap too
+                ra, rb = list(oa), list(ob)
+            a.render_box, b.render_box = tuple(ra), tuple(rb)
+
+
 def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str = "en",
             font_style: str = "manga") -> np.ndarray:
     pil = Image.fromarray(clean_img)
     draw = ImageDraw.Draw(pil)
     gray = cv2.cvtColor(clean_img, cv2.COLOR_RGB2GRAY)
 
-    for r in regions:
-        text = r.translated_text.strip()
-        if not text:
-            continue
-        text = prepare(text, target_lang)
+    # Work out every drawing box first, so neighbours can be kept apart
+    drawn = [r for r in regions if r.translated_text.strip()]
+    for r in drawn:
         if r.render_box is None:
             r.render_box = bubble_box(gray, r, regions)
+    separate_boxes(drawn)
+
+    for r in drawn:
+        text = prepare(r.translated_text.strip(), target_lang)
         box = r.render_box
         font, lines, line_h = fit_text(text, box, target_lang, font_style,
                                        max_size=source_font_cap(r))

@@ -264,3 +264,19 @@ def test_text_without_bubble_does_not_spread_over_artwork():
     box = ts.bubble_box(gray, r, [r])
     assert box[2] <= 214                    # stopped before the artwork
     assert ts.source_font_cap(r) <= 27      # ~1.2x the 22px original characters
+
+
+def test_neighbouring_text_blocks_never_share_space():
+    """Two text blocks in one big white area must not be drawn on top of each other."""
+    import importlib
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    img = np.full((300, 400, 3), 255, np.uint8)
+    img[0:4, :] = img[-4:, :] = 0       # panel border so the flood fill stays inside
+    img[:, 0:4] = img[:, -4:] = 0
+    a = TextRegion(id=0, box=(120, 60, 170, 240), line_boxes=[(120, 60, 170, 240)], vertical=True,
+                   translated_text="A fairly long first line of dialogue goes here.")
+    b = TextRegion(id=1, box=(220, 60, 270, 240), line_boxes=[(220, 60, 270, 240)], vertical=True,
+                   translated_text="And a second, equally long line right next to it.")
+    ts.typeset(img, [a, b])
+    assert not ts._overlaps(a.render_box, b.render_box)
+    assert a.render_box[2] <= b.render_box[0]
