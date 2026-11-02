@@ -56,7 +56,8 @@ WORKERS = max(1, int(os.getenv("WORKERS", "2")))
 RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "10"))
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))          # single image
-MAX_BATCH_UPLOAD_MB = int(os.getenv("MAX_BATCH_UPLOAD_MB", "500"))  # total for a batch
+MAX_BATCH_UPLOAD_MB = int(os.getenv("MAX_BATCH_UPLOAD_MB", "1000"))  # total for a batch
+MAX_PAGES = int(os.getenv("MAX_PAGES", "1000"))  # pages in one batch (all files together)
 USE_GPU = os.getenv("USE_GPU", "0") == "1"
 
 # Languages. Names are shown in the dropdowns in their own script, like most translator UIs.

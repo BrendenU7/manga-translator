@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from PIL import Image
+from . import config
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif", ".heic", ".heif"}
 ARCHIVE_EXTS = {".zip", ".cbz", ".epub"}
@@ -28,7 +29,7 @@ try:
 except ImportError:
     pass
 
-MAX_PAGES = 500
+MAX_PAGES = config.MAX_PAGES  # set in config.py (env MAX_PAGES)
 MAX_UNCOMPRESSED_BYTES = 2 * 1024 ** 3  # refuse zip bombs
 PDF_DPI = 150
 

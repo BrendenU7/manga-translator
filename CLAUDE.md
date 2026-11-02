@@ -53,7 +53,8 @@ Portfolio project; keep code readable and well commented over clever.
 - Config comes from env vars in `backend/app/config.py`; never hardcode keys.
 
 - Settings live in `config.py`: DETECTOR (ctd|easyocr), CLAUDE_VISION, UPPERCASE_TEXT, FONT_PATH,
-  FONT_STYLES (fonts per style in `pipeline/fonts.STYLE_FONTS`), WORKERS, RETENTION_DAYS.
+  FONT_STYLES (fonts per style in `pipeline/fonts.STYLE_FONTS`), WORKERS, RETENTION_DAYS,
+  MAX_PAGES (pages per batch, 1000), MAX_BATCH_UPLOAD_MB (1000).
 - Don't commit copyrighted manga pages; use `samples/make_sample.py` for fixtures.
 
 ## Next up (see README roadmap)
