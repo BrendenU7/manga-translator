@@ -41,7 +41,9 @@ Rules:
 - Keep translations concise: they must fit back into the same bubble.
 - If a bubble is already in {target}, keep it as is (fix obvious OCR errors only).
 - Keep stammers and trailing dots ("Th-this is...", "Beast...!").
-- Translate sound effects briefly ("BAM", "THUD").
+- Do NOT translate sound effects (onomatopoeia drawn as part of the art, e.g. ドン, ゴゴゴ,
+  쾅, 砰, BAM): return an empty string for them so the original lettering stays untouched.
+  Spoken interjections inside a speech bubble ("Ah!", "Huh?") are dialogue: translate those.
 - If a region is not text (a mis-detection), return an empty string for it.
 {glossary}{context_rule}
 Return ONLY a JSON object:

@@ -280,3 +280,28 @@ def test_neighbouring_text_blocks_never_share_space():
     ts.typeset(img, [a, b])
     assert not ts._overlaps(a.render_box, b.render_box)
     assert a.render_box[2] <= b.render_box[0]
+
+
+def test_sound_effects_are_left_untouched(monkeypatch):
+    """Claude returns "" for sound effects: those regions are neither erased nor redrawn."""
+    from backend.app import pipeline
+    from backend.app.pipeline import translate
+    assert "Do NOT translate sound effects" in translate.SYSTEM_PROMPT
+    img = np.full((200, 300, 3), 255, np.uint8)
+    img[40:60, 20:80] = 0          # "dialogue" lettering
+    img[120:180, 180:280] = 30     # big drawn sound effect
+    regions = [TextRegion(id=0, box=(20, 40, 80, 60), line_boxes=[(20, 40, 80, 60)]),
+               TextRegion(id=1, box=(180, 120, 280, 180), line_boxes=[(180, 120, 280, 180)],
+                          on_light_bg=False)]
+
+    def fake_translate(regs, *a, **kw):
+        for r in regs:
+            r.translated_text = "Hi!" if r.id == 0 else ""
+        return regs
+
+    monkeypatch.setattr(pipeline, "translate_regions", fake_translate)
+    kept = pipeline.translate_page(img, regions, "ja", "en", "standard", "", [], lambda s: None)
+    assert [r.translated_text for r in kept] == ["Hi!"]
+    _, out = pipeline.finish_page(img, kept, None, "en", lambda s: None)
+    assert np.array_equal(out[120:180, 180:280], img[120:180, 180:280])  # SFX unchanged
+    assert not np.array_equal(out[40:60, 20:80], img[40:60, 20:80])      # dialogue replaced
