@@ -435,3 +435,12 @@ main.results { max-width: 1000px; }
 .bubble .size-ctl button:hover { border-color: var(--accent); }
 .bubble .size-val { min-width: 38px; text-align: center; color: var(--ink); font-weight: 600; }
 .bubble .bubble-tools label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* Arrow pad (move a bubble's text) */
+.bubble .move-ctl { display: inline-flex; align-items: center; gap: 8px; }
+.bubble .nudge { display: inline-grid; grid-template-columns: repeat(3, 24px); gap: 2px; }
+.bubble .nudge button { width: 24px; height: 24px; padding: 0; border-radius: 5px; font-size: 13px;
+  line-height: 1; background: var(--surface); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+.bubble .nudge button:hover { border-color: var(--accent); }
+.bubble .nudge .nudge-reset { color: var(--muted); }
+.bubble .nudge .nudge-reset.moved { color: var(--accent); border-color: var(--accent); }

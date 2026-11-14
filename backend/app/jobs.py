@@ -298,7 +298,8 @@ def update_translations(job: Job, edits: dict[int, str], font_style: str | None 
     """Apply hand edits and redraw the page (only the lettering step runs, so it's free).
 
     edits: new text per bubble id. layout: per bubble id, any of
-    {"scale": text size multiplier, "fit_original": draw inside the original text's box}.
+    {"scale": text size multiplier, "fit_original": draw inside the original text's box,
+     "offset_x"/"offset_y": move the text by this many pixels}.
     """
     if font_style:
         job.font_style = font_style
@@ -311,6 +312,9 @@ def update_translations(job: Job, edits: dict[int, str], font_style: str | None 
             r.font_scale = float(min(2.0, max(0.4, opts["scale"])))
         if opts.get("fit_original") is not None:
             r.fit_original = bool(opts["fit_original"])
+        for key in ("offset_x", "offset_y"):  # arrow pad; the drawing keeps text on the page
+            if opts.get(key) is not None:
+                setattr(r, key, int(max(-5000, min(5000, opts[key]))))
     cleaned = _load_rgb(job.dir / "cleaned.png")
     Image.fromarray(rerender(cleaned, regions, job.target_lang, job.font_style)).save(job.dir / "translated.png")
     job.regions = [r.to_dict() for r in regions]

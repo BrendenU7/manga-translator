@@ -404,6 +404,12 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
         total_h = line_h * len(lines)
         y = box[1] + ((box[3] - box[1]) - total_h) // 2
         cx = (box[0] + box[2]) / 2
+        if r.offset_x or r.offset_y:
+            # Moved by hand in the editor (arrow pad). Keep the whole block on the page.
+            half_w = max((font.getlength(line) for line in lines), default=0) / 2
+            page_h, page_w = clean_img.shape[:2]
+            cx = min(max(cx + r.offset_x, half_w + 2), page_w - half_w - 2)
+            y = int(min(max(y + r.offset_y, 2), page_h - total_h - 2))
         stroke = 0 if r.on_light_bg else max(2, font.size // 8)
         for line in lines:
             draw.text((cx, y), line, font=font, fill=(0, 0, 0), anchor="ma",

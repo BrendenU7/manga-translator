@@ -16,6 +16,8 @@ class TextRegion:
     render_box: Box | None = None             # where the translation gets drawn
     font_scale: float = 1.0                   # hand adjustment in the editor (1.0 = automatic size)
     fit_original: bool = False                # editor: draw only inside the original text's box
+    offset_x: int = 0                         # editor: move the text right (+) / left (-), pixels
+    offset_y: int = 0                         # editor: move the text down (+) / up (-), pixels
 
     def to_dict(self) -> dict:
         return asdict(self)

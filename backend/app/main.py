@@ -247,6 +247,8 @@ class Edit(BaseModel):
     text: str
     scale: float | None = None          # text size multiplier (1.0 = automatic)
     fit_original: bool | None = None    # keep the text inside the original lettering's box
+    offset_x: int | None = None         # move the text right/left, pixels (arrow pad)
+    offset_y: int | None = None         # move the text down/up, pixels
 
 
 class EditRequest(BaseModel):
@@ -263,7 +265,8 @@ def edit_translations(job_id: str, body: EditRequest, user: User = Depends(curre
         raise HTTPException(400, "Unsupported font style")
     job = jobs.update_translations(
         job, {e.id: e.text for e in body.translations}, body.font_style,
-        {e.id: {"scale": e.scale, "fit_original": e.fit_original} for e in body.translations})
+        {e.id: {"scale": e.scale, "fit_original": e.fit_original,
+                "offset_x": e.offset_x, "offset_y": e.offset_y} for e in body.translations})
     return _job_json(job)
 
 

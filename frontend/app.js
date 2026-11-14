@@ -560,6 +560,18 @@ function showResult(page) {
           <button type="button" class="size-up" aria-label="Bigger text">+</button></span>
         <label title="Draw this bubble's text only where the original lettering was">
           <input type="checkbox" class="fit-orig"> Fit to original box</label>
+        <span class="move-ctl">Move
+          <span class="nudge" role="group" aria-label="Move this bubble's text">
+            <button type="button" data-dx="-1" data-dy="-1" aria-label="Move up-left">↖</button>
+            <button type="button" data-dx="0" data-dy="-1" aria-label="Move up">↑</button>
+            <button type="button" data-dx="1" data-dy="-1" aria-label="Move up-right">↗</button>
+            <button type="button" data-dx="-1" data-dy="0" aria-label="Move left">←</button>
+            <button type="button" class="nudge-reset" data-reset="1" aria-label="Back to automatic position" title="Back to automatic position">⟲</button>
+            <button type="button" data-dx="1" data-dy="0" aria-label="Move right">→</button>
+            <button type="button" data-dx="-1" data-dy="1" aria-label="Move down-left">↙</button>
+            <button type="button" data-dx="0" data-dy="1" aria-label="Move down">↓</button>
+            <button type="button" data-dx="1" data-dy="1" aria-label="Move down-right">↘</button>
+          </span></span>
       </div>`;
     row.querySelector(".src").textContent = r.source_text;
     const ta = row.querySelector("textarea");
@@ -568,6 +580,9 @@ function showResult(page) {
     row.dataset.scale = r.font_scale ?? 1;
     row.querySelector(".size-val").textContent = `${Math.round(row.dataset.scale * 100)}%`;
     row.querySelector(".fit-orig").checked = !!r.fit_original;
+    row.dataset.ox = r.offset_x || 0;
+    row.dataset.oy = r.offset_y || 0;
+    row.querySelector(".nudge-reset").classList.toggle("moved", !!(r.offset_x || r.offset_y));
     list.appendChild(row);
   });
   // The first page shown for a batch: scroll so the toolbar sits at the top, then
@@ -587,7 +602,8 @@ async function saveEdits() {
   const translations = [...document.querySelectorAll("#bubbles .bubble")].map((row) => {
     const ta = row.querySelector("textarea");
     return { id: Number(ta.dataset.id), text: ta.value, scale: Number(row.dataset.scale),
-             fit_original: row.querySelector(".fit-orig").checked };
+             fit_original: row.querySelector(".fit-orig").checked,
+             offset_x: Number(row.dataset.ox), offset_y: Number(row.dataset.oy) };
   });
   const res = await fetch(`/api/jobs/${job.id}/translations`, {
     method: "PUT",
@@ -614,6 +630,23 @@ $("#bubbles").addEventListener("click", (e) => {
   if (scale === Number(row.dataset.scale)) return;
   row.dataset.scale = scale;
   row.querySelector(".size-val").textContent = `${Math.round(scale * 100)}%`;
+  saveEdits();
+});
+// Arrow pad: move a bubble's text. One click = ~0.5% of the page width (5px on a 1024px
+// page); the middle button puts it back where the app placed it.
+$("#bubbles").addEventListener("click", (e) => {
+  const btn = e.target.closest(".nudge button");
+  if (!btn) return;
+  const row = btn.closest(".bubble");
+  if (btn.dataset.reset) {
+    if (row.dataset.ox == 0 && row.dataset.oy == 0) return;
+    row.dataset.ox = 0; row.dataset.oy = 0;
+  } else {
+    const step = Math.max(2, Math.round(($("#img-original").naturalWidth || 1000) / 200));
+    row.dataset.ox = Number(row.dataset.ox) + Number(btn.dataset.dx) * step;
+    row.dataset.oy = Number(row.dataset.oy) + Number(btn.dataset.dy) * step;
+  }
+  row.querySelector(".nudge-reset").classList.toggle("moved", row.dataset.ox != 0 || row.dataset.oy != 0);
   saveEdits();
 });
 $("#bubbles").addEventListener("change", (e) => {

@@ -384,3 +384,20 @@ def test_editor_size_and_fit_original():
     assert (smaller[2] - smaller[0]) < (normal[2] - normal[0])
     x1, y1, x2, y2 = drawn_box(fit_original=True)
     assert x1 >= 248 and y1 >= 248 and x2 <= 352 and y2 <= 332
+
+
+def test_editor_move_text_and_keep_it_on_the_page():
+    import importlib
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    img = np.full((400, 400, 3), 255, np.uint8)
+
+    def drawn(**kw):
+        r = TextRegion(id=0, box=(150, 150, 250, 250), line_boxes=[(150, 150, 250, 250)],
+                       source_text="あ" * 4, translated_text="Hi!", render_box=(150, 150, 250, 250), **kw)
+        ys, xs = np.nonzero(ts.typeset(img, [r]).min(axis=2) < 128)
+        return xs.min(), ys.min(), xs.max(), ys.max()
+
+    base, moved = drawn(), drawn(offset_x=20, offset_y=-10)
+    assert abs((moved[0] - base[0]) - 20) <= 1 and abs((moved[1] - base[1]) + 10) <= 1
+    far = drawn(offset_x=5000, offset_y=5000)          # pushed off the page: stops at the edge
+    assert far[2] < 400 and far[3] < 400
