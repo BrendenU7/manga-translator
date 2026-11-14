@@ -437,6 +437,7 @@ async function selectPage(id) {
   $("#bubbles").innerHTML = page.status === "error" ? ""
     : '<p class="note">This page is being translated…</p>';
   $("#retry-box").hidden = page.status !== "error";
+  setRedo(page.status === "error");
   $("#retry-reason").textContent = `This page failed: ${page.error || "unknown error"}`;
   $("#edit-actions").hidden = true;
   $("#again-box").hidden = true;
@@ -459,6 +460,7 @@ async function retryPage(id, quality) {
     $("#retry-box").hidden = true;
     $("#edit-actions").hidden = true;
     $("#again-box").hidden = true;
+    setRedo(false);
     $("#bubbles").innerHTML = "";
     pageMessage(`Translating this page again${quality === "best" ? " with Best quality" : ""}…`);
   }
@@ -474,6 +476,41 @@ function pageMessage(text, bad = false) {
 $("#retry-economy").addEventListener("click", () => retryPage(selectedId, job?.quality || "economy"));
 $("#retry-best").addEventListener("click", () => retryPage(selectedId, "best"));
 $("#again-btn").addEventListener("click", () => retryPage(selectedId, $("#again-quality").value));
+
+// Redo page (viewer toolbar): pick a quality from a small menu, then translate this page again
+function setRedo(enabled) {
+  $("#redo-btn").disabled = !enabled;
+  $("#redo-btn").title = enabled ? "Translate this page again" : "Available once this page has finished";
+  if (!enabled) closeRedoMenu();
+}
+function closeRedoMenu() {
+  $("#redo-menu").hidden = true;
+  $("#redo-btn").setAttribute("aria-expanded", "false");
+}
+$("#redo-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const menu = $("#redo-menu");
+  if (!menu.hidden) return closeRedoMenu();
+  for (const b of menu.querySelectorAll("button[data-quality]")) {
+    const q = appCfg?.qualities?.[b.dataset.quality];
+    const name = b.dataset.quality === "best" ? "Best quality" : "Economy";
+    b.textContent = q ? `Redo with ${name} · ≈ ${fmtUsd(q.est_page_usd)}` : `Redo with ${name}`;
+  }
+  menu.hidden = false;
+  $("#redo-btn").setAttribute("aria-expanded", "true");
+  // The menu lines up with the button's right edge; on narrow screens slide it back on-screen
+  menu.style.right = "0px";
+  const left = menu.getBoundingClientRect().left;
+  if (left < 8) menu.style.right = `${left - 8}px`;
+});
+$("#redo-menu").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-quality]");
+  if (!b) return;
+  closeRedoMenu();
+  retryPage(selectedId, b.dataset.quality);
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".redo-wrap")) closeRedoMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRedoMenu(); });
 $("#retry-failed").addEventListener("click", async () => {
   $("#retry-failed").disabled = true;
   for (const p of batch.pages.filter((p) => p.status === "error")) await retryPage(p.id);
@@ -491,6 +528,7 @@ function showResult(page) {
   $("#retry-box").hidden = true;
   $("#edit-actions").hidden = false;
   $("#again-box").hidden = false;
+  setRedo(true);
   $("#again-quality").value = page.quality === "best" ? "economy" : "best";  // suggest the other one
   renderCost();
   renderPageNav();

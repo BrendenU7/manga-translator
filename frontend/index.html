@@ -136,6 +136,15 @@
             <span id="page-note" class="page-note" hidden></span>
             <button id="next-page" class="button secondary" type="button" title="Next page (→)">›</button>
           </div>
+          <div class="redo-wrap">
+            <button id="redo-btn" class="button secondary" type="button" title="Translate this page again"
+                    aria-haspopup="menu" aria-expanded="false">↻ Redo page</button>
+            <div id="redo-menu" class="redo-menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-quality="economy"></button>
+              <button type="button" role="menuitem" data-quality="best"></button>
+              <p class="note">Replaces this page's translation, including any edits you made.</p>
+            </div>
+          </div>
           <a id="download" class="button secondary icon-btn" download title="Download this page">⤓</a>
           <button id="read-btn" class="button secondary icon-btn" type="button" title="Fullscreen reader (← → keys, O = original)">⛶</button>
         </div>

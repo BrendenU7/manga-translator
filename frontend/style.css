@@ -406,3 +406,22 @@ main.results { max-width: 1000px; }
   .seg { overflow-x: auto; max-width: 100%; }   /* Original / Translated / Compare / Side by side */
   .seg button { white-space: nowrap; }
 }
+
+/* Redo page: button + small menu in the viewer toolbar */
+.redo-wrap { position: relative; }
+.redo-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+  width: max-content; max-width: min(300px, 90vw);
+  display: flex; flex-direction: column; gap: 6px; padding: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+.redo-menu[hidden] { display: none; }
+.redo-menu button {
+  text-align: left; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer;
+}
+.redo-menu button:hover { border-color: var(--accent); }
+.redo-menu .note { margin: 2px 2px 0; font-size: 12px; }
+#redo-btn { white-space: nowrap; }
+#redo-btn:disabled { opacity: .5; cursor: not-allowed; }
