@@ -301,3 +301,21 @@ def test_stopped_pages_are_reported_separately(client, monkeypatch):
     batch = wait_for(client, f"/api/batches/{batch['id']}")
     assert batch["stopped"] >= 1 and batch["stopped"] == batch["failed"]
     assert all(p["stopped"] for p in batch["pages"] if p["status"] == "error")
+
+
+def test_editor_saves_size_and_fit_per_bubble(tmp_path, monkeypatch):
+    """Editing stores per-bubble size and fit settings (and clamps the size)."""
+    from backend.app import config, jobs
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    from backend.app.pipeline.models import TextRegion
+    import numpy as np
+    from PIL import Image
+    job = jobs.Job(id="abcdef123456", filename="p.png", source_lang="ja", target_lang="en",
+                   status="done", stage="done", owner="u")
+    job.dir.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(np.full((200, 200, 3), 255, np.uint8)).save(job.dir / "cleaned.png")
+    job.regions = [TextRegion(id=0, box=(50, 50, 150, 120), translated_text="Hi!").to_dict()]
+    job = jobs.update_translations(job, {0: "Hi!"}, None, {0: {"scale": 5, "fit_original": True}})
+    r = TextRegion.from_dict(job.regions[0])
+    assert r.font_scale == 2.0 and r.fit_original is True
+    assert (job.dir / "translated.png").exists()

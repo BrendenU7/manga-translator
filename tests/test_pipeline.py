@@ -364,3 +364,23 @@ def test_page_lettering_size_is_consistent():
     sizes = [ts.fit_text(ts.prepare(r.translated_text, "en"), r.render_box,
                          max_size=min(ts.source_font_cap(r), 20))[0].size for r in (big, small)]
     assert sizes == [20, 20]
+
+
+def test_editor_size_and_fit_original():
+    """Size -/+ changes a bubble's text size; Fit to original box keeps it in the old box."""
+    import importlib
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    img = np.full((600, 600, 3), 255, np.uint8)
+
+    def drawn_box(**kw):
+        r = TextRegion(id=0, box=(250, 250, 350, 330), line_boxes=[(250, 250, 350, 330)],
+                       source_text="あ" * 6, translated_text="Hello there, how are you?",
+                       render_box=(150, 150, 450, 450), **kw)
+        out = ts.typeset(img, [r])
+        ys, xs = np.nonzero(out.min(axis=2) < 128)
+        return xs.min(), ys.min(), xs.max(), ys.max()
+
+    normal, smaller = drawn_box(), drawn_box(font_scale=0.6)
+    assert (smaller[2] - smaller[0]) < (normal[2] - normal[0])
+    x1, y1, x2, y2 = drawn_box(fit_original=True)
+    assert x1 >= 248 and y1 >= 248 and x2 <= 352 and y2 <= 332

@@ -245,6 +245,8 @@ def get_image(job_id: str, kind: str, user: User = Depends(current_user)):
 class Edit(BaseModel):
     id: int
     text: str
+    scale: float | None = None          # text size multiplier (1.0 = automatic)
+    fit_original: bool | None = None    # keep the text inside the original lettering's box
 
 
 class EditRequest(BaseModel):
@@ -259,7 +261,9 @@ def edit_translations(job_id: str, body: EditRequest, user: User = Depends(curre
         raise HTTPException(409, "Page is not finished yet")
     if body.font_style and body.font_style not in config.FONT_STYLES:
         raise HTTPException(400, "Unsupported font style")
-    job = jobs.update_translations(job, {e.id: e.text for e in body.translations}, body.font_style)
+    job = jobs.update_translations(
+        job, {e.id: e.text for e in body.translations}, body.font_style,
+        {e.id: {"scale": e.scale, "fit_original": e.fit_original} for e in body.translations})
     return _job_json(job)
 
 

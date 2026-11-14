@@ -14,6 +14,8 @@ class TextRegion:
     vertical: bool = False
     on_light_bg: bool = True                  # True = inside a white speech bubble
     render_box: Box | None = None             # where the translation gets drawn
+    font_scale: float = 1.0                   # hand adjustment in the editor (1.0 = automatic size)
+    fit_original: bool = False                # editor: draw only inside the original text's box
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -552,11 +552,22 @@ function showResult(page) {
   page.regions.forEach((r) => {
     const row = document.createElement("div");
     row.className = "bubble";
-    row.innerHTML = `<div class="num">${r.id + 1}</div><div class="src"></div><textarea rows="2"></textarea>`;
+    row.innerHTML = `<div class="num">${r.id + 1}</div><div class="src"></div><textarea rows="2"></textarea>
+      <div class="bubble-tools">
+        <span class="size-ctl" title="Text size for this bubble (it never goes outside its box)">
+          Size <button type="button" class="size-down" aria-label="Smaller text">−</button>
+          <b class="size-val"></b>
+          <button type="button" class="size-up" aria-label="Bigger text">+</button></span>
+        <label title="Draw this bubble's text only where the original lettering was">
+          <input type="checkbox" class="fit-orig"> Fit to original box</label>
+      </div>`;
     row.querySelector(".src").textContent = r.source_text;
     const ta = row.querySelector("textarea");
     ta.value = r.translated_text;
     ta.dataset.id = r.id;
+    row.dataset.scale = r.font_scale ?? 1;
+    row.querySelector(".size-val").textContent = `${Math.round(row.dataset.scale * 100)}%`;
+    row.querySelector(".fit-orig").checked = !!r.fit_original;
     list.appendChild(row);
   });
   // The first page shown for a batch: scroll so the toolbar sits at the top, then
@@ -564,21 +575,49 @@ function showResult(page) {
   // (no auto-scroll: the progress cards above stay in view, the page is just below)
 }
 
-$("#rerender-btn").addEventListener("click", async () => {
+// Save the editor (text, per-bubble size and box) and redraw the page. Only the lettering
+// step runs, so it's quick and free. Clicks that arrive while a redraw is running are
+// merged into one more redraw afterwards.
+let rendering = false, renderAgain = false;
+async function saveEdits() {
   if (!job || job.status !== "done") return;
-  const translations = [...document.querySelectorAll("#bubbles textarea")]
-    .map((ta) => ({ id: Number(ta.dataset.id), text: ta.value }));
+  if (rendering) { renderAgain = true; return; }
+  rendering = true;
   $("#rerender-btn").disabled = true;
+  const translations = [...document.querySelectorAll("#bubbles .bubble")].map((row) => {
+    const ta = row.querySelector("textarea");
+    return { id: Number(ta.dataset.id), text: ta.value, scale: Number(row.dataset.scale),
+             fit_original: row.querySelector(".fit-orig").checked };
+  });
   const res = await fetch(`/api/jobs/${job.id}/translations`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ translations, font_style: $("#edit-font").value }),
   });
+  rendering = false;
   $("#rerender-btn").disabled = false;
   if (!res.ok) return pageMessage("Re-render failed: this page isn't finished.", true);
   job = await res.json();
   $("#img-translated").src = bust(job.translated_url);
   $("#cmp-translated").src = $("#img-translated").src;
+  if (renderAgain) { renderAgain = false; saveEdits(); }
+}
+$("#rerender-btn").addEventListener("click", saveEdits);
+
+// Per-bubble size -/+ (10% steps, 40%..200%) and "Fit to original box": redraw right away
+$("#bubbles").addEventListener("click", (e) => {
+  const btn = e.target.closest(".size-down, .size-up");
+  if (!btn) return;
+  const row = btn.closest(".bubble");
+  const step = btn.classList.contains("size-up") ? 0.1 : -0.1;
+  const scale = Math.min(2, Math.max(0.4, Math.round((Number(row.dataset.scale) + step) * 10) / 10));
+  if (scale === Number(row.dataset.scale)) return;
+  row.dataset.scale = scale;
+  row.querySelector(".size-val").textContent = `${Math.round(scale * 100)}%`;
+  saveEdits();
+});
+$("#bubbles").addEventListener("change", (e) => {
+  if (e.target.classList.contains("fit-orig")) saveEdits();
 });
 
 // Changing the font of a finished page re-renders it right away

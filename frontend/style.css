@@ -425,3 +425,13 @@ main.results { max-width: 1000px; }
 .redo-menu .note { margin: 2px 2px 0; font-size: 12px; }
 #redo-btn { white-space: nowrap; }
 #redo-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Per-bubble layout tools in the editor: Size − 100% +, Fit to original box */
+.bubble .bubble-tools { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px 16px; font-size: 13px; color: var(--muted); margin-top: -4px; }
+.bubble .size-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.bubble .size-ctl button { width: 26px; height: 26px; padding: 0; border-radius: 6px; line-height: 1;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+.bubble .size-ctl button:hover { border-color: var(--accent); }
+.bubble .size-val { min-width: 38px; text-align: center; color: var(--ink); font-weight: 600; }
+.bubble .bubble-tools label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }

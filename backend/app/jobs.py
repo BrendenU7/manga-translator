@@ -293,14 +293,24 @@ def retry_job(job: Job, quality: str | None = None) -> Job:
     return job
 
 
-def update_translations(job: Job, edits: dict[int, str], font_style: str | None = None) -> Job:
-    """Apply hand-edited translations (and optionally a new font style) and redraw the page."""
+def update_translations(job: Job, edits: dict[int, str], font_style: str | None = None,
+                        layout: dict[int, dict] | None = None) -> Job:
+    """Apply hand edits and redraw the page (only the lettering step runs, so it's free).
+
+    edits: new text per bubble id. layout: per bubble id, any of
+    {"scale": text size multiplier, "fit_original": draw inside the original text's box}.
+    """
     if font_style:
         job.font_style = font_style
     regions = [TextRegion.from_dict(d) for d in job.regions]
     for r in regions:
         if r.id in edits:
             r.translated_text = edits[r.id]
+        opts = (layout or {}).get(r.id, {})
+        if opts.get("scale") is not None:
+            r.font_scale = float(min(2.0, max(0.4, opts["scale"])))
+        if opts.get("fit_original") is not None:
+            r.fit_original = bool(opts["fit_original"])
     cleaned = _load_rgb(job.dir / "cleaned.png")
     Image.fromarray(rerender(cleaned, regions, job.target_lang, job.font_style)).save(job.dir / "translated.png")
     job.regions = [r.to_dict() for r in regions]

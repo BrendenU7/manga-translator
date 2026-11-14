@@ -384,9 +384,23 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
 
     for r in drawn:
         text = prepare(r.translated_text.strip(), target_lang)
-        box = r.render_box
+        # "Fit to original box" (editor): use exactly where the original lettering was
+        box = r.box if r.fit_original else r.render_box
         font, lines, line_h = fit_text(text, box, target_lang, font_style,
                                        max_size=min(source_font_cap(r), page_size))
+        if r.font_scale != 1.0:
+            # Size -/+ (editor): relative to the automatic size, but never outside the box
+            wanted = int(round(font.size * r.font_scale))
+            fit_box = box
+            if r.font_scale < 1:
+                # Shrink the space too (around its center), so the text keeps the same
+                # shape instead of spreading into long thin lines
+                bx1, by1, bx2, by2 = box
+                dx = int((bx2 - bx1) * (1 - r.font_scale) / 2)
+                dy = int((by2 - by1) * (1 - r.font_scale) / 2)
+                fit_box = (bx1 + dx, by1 + dy, bx2 - dx, by2 - dy)
+            font, lines, line_h = fit_text(text, fit_box, target_lang, font_style,
+                                           max_size=max(MIN_FONT, min(MAX_FONT, wanted)))
         total_h = line_h * len(lines)
         y = box[1] + ((box[3] - box[1]) - total_h) // 2
         cx = (box[0] + box[2]) / 2
