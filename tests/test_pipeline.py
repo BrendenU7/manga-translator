@@ -401,3 +401,20 @@ def test_editor_move_text_and_keep_it_on_the_page():
     assert abs((moved[0] - base[0]) - 20) <= 1 and abs((moved[1] - base[1]) + 10) <= 1
     far = drawn(offset_x=5000, offset_y=5000)          # pushed off the page: stops at the edge
     assert far[2] < 400 and far[3] < 400
+
+
+def test_editor_bigger_text_works_in_a_tight_box():
+    """+ must make text bigger even when the automatic box only just fits the text."""
+    import importlib
+    ts = importlib.import_module("backend.app.pipeline.typeset")
+    img = np.full((1500, 1000, 3), 255, np.uint8)     # page size allows ~20px text
+
+    def width(scale):
+        box = (450, 700, 530, 740)   # tight: the text only fits here well below 20px
+        r = TextRegion(id=0, box=box, line_boxes=[box], source_text="あ" * 8,
+                       translated_text="Hello there, my good friend!", render_box=box, font_scale=scale)
+        ys, xs = np.nonzero(ts.typeset(img, [r]).min(axis=2) < 128)
+        return xs.max() - xs.min()
+
+    assert width(1.5) > width(1.0) * 1.2
+    assert width(0.6) < width(1.0)

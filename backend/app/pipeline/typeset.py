@@ -389,16 +389,16 @@ def typeset(clean_img: np.ndarray, regions: list[TextRegion], target_lang: str =
         font, lines, line_h = fit_text(text, box, target_lang, font_style,
                                        max_size=min(source_font_cap(r), page_size))
         if r.font_scale != 1.0:
-            # Size -/+ (editor): relative to the automatic size, but never outside the box
+            # Size -/+ (editor): relative to the automatic size
             wanted = int(round(font.size * r.font_scale))
-            fit_box = box
-            if r.font_scale < 1:
-                # Shrink the space too (around its center), so the text keeps the same
-                # shape instead of spreading into long thin lines
-                bx1, by1, bx2, by2 = box
-                dx = int((bx2 - bx1) * (1 - r.font_scale) / 2)
-                dy = int((by2 - by1) * (1 - r.font_scale) / 2)
-                fit_box = (bx1 + dx, by1 + dy, bx2 - dx, by2 - dy)
+            # Scale the space with the text (around its center), so the text keeps the same
+            # shape: smaller doesn't spread into long thin lines, and bigger has room to
+            # grow (the automatic box is usually just big enough for the automatic size).
+            bx1, by1, bx2, by2 = box
+            dx = int((bx2 - bx1) * (r.font_scale - 1) / 2)
+            dy = int((by2 - by1) * (r.font_scale - 1) / 2)
+            page_h, page_w = clean_img.shape[:2]
+            fit_box = (max(0, bx1 - dx), max(0, by1 - dy), min(page_w, bx2 + dx), min(page_h, by2 + dy))
             font, lines, line_h = fit_text(text, fit_box, target_lang, font_style,
                                            max_size=max(MIN_FONT, min(MAX_FONT, wanted)))
         total_h = line_h * len(lines)
