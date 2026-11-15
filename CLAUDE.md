@@ -15,7 +15,10 @@ Portfolio project; keep code readable and well commented over clever.
   `jobs.cleanup_expired()` deletes anything older than RETENTION_DAYS (background thread).
 - Results page (index.html with a batch): single centered column: job title, progress card,
   summary, per-page chips (stage dots), retention/download card, viewer (Original/Translated/
-  Compare/Side by side, ‹ n/N ›), contained thumbnail strip, editor below. Grid/flex children
+  Compare/Side by side, ‹ n/N ›), contained thumbnail strip, editor below.
+  Editing: per-bubble Size/Fit/Move in the editor rows (TextRegion font_scale, fit_original,
+  offset_x/y; only typeset re-runs). Clicking a bubble on the translated image (#hotspots)
+  opens #bubble-pop, which drives that row's controls (docks to the bottom on phones). Grid/flex children
   need `min-width: 0` so wide content (strips) never widens the page.
 - `frontend/common.js`: shared header (theme toggle, login redirect, logout); pages:
   `index.html` (translate, `?batch=<id>` reopens), `dashboard.html`, `login.html`

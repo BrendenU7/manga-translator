@@ -297,7 +297,6 @@ main.wide { padding-top: 8px; }
 /* Untranslated page: a calm placeholder instead of a broken-image icon */
 #img-translated:not([src]) { display: none; }
 .trans .placeholder { display: none; color: var(--muted); padding: 40px 0; }
-#img-translated:not([src]) + .placeholder { display: block; }
 
 /* ==================================================================== results page (v2)
    One centered column, modeled on a classic "translation progress" page:
@@ -444,3 +443,38 @@ main.results { max-width: 1000px; }
 .bubble .nudge button:hover { border-color: var(--accent); }
 .bubble .nudge .nudge-reset { color: var(--muted); }
 .bubble .nudge .nudge-reset.moved { color: var(--accent); border-color: var(--accent); }
+
+/* Edit on the page: click targets over the translated image + floating panel */
+.trans-stage { position: relative; display: block; width: fit-content; max-width: 100%; margin: 0 auto; }
+.trans-stage:has(#img-translated:not([src])) { display: none; }
+.trans-stage:has(#img-translated:not([src])) + .placeholder { display: block; }
+#hotspots { position: absolute; inset: 0; }
+#viewer:not(.translated):not(.side) #hotspots { display: none; }
+.hotspot { position: absolute; padding: 0; margin: 0; background: transparent; cursor: pointer;
+  border: 2px dashed transparent; border-radius: 8px; }
+.hotspot:hover, .hotspot:focus-visible { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); outline: none; }
+.hotspot.selected { border: 2px solid var(--accent); background: transparent; }  /* outline only: keep the text visible */
+#bubbles .bubble.active { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+
+.bubble-pop { position: fixed; z-index: 40; width: 300px; max-width: calc(100vw - 16px);
+  display: flex; flex-direction: column; gap: 8px; padding: 12px;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .18); }
+.bubble-pop[hidden] { display: none; }
+.bubble-pop .pop-head { display: flex; align-items: center; justify-content: space-between; }
+.bubble-pop .pop-close { background: none; border: 0; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+.bubble-pop textarea { width: 100%; resize: vertical; min-height: 52px; }
+.bubble-pop .pop-tools, .bubble-pop .pop-move { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 13px; color: var(--muted); }
+.bubble-pop .pop-tools label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.bubble-pop .pop-move .note { flex-basis: 100%; margin: 0; font-size: 12px; }
+.bubble-pop .size-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.bubble-pop .size-ctl button, .bubble-pop .nudge button { width: 26px; height: 26px; padding: 0; border-radius: 6px;
+  line-height: 1; background: var(--surface); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+.bubble-pop .size-ctl button:hover, .bubble-pop .nudge button:hover { border-color: var(--accent); }
+.bubble-pop #pop-size { min-width: 38px; text-align: center; color: var(--ink); }
+.bubble-pop .nudge { display: inline-grid; grid-template-columns: repeat(3, 26px); gap: 2px; }
+.bubble-pop .nudge .nudge-reset { color: var(--muted); }
+.bubble-pop .nudge .nudge-reset.moved { color: var(--accent); border-color: var(--accent); }
+/* Phones: dock to the bottom of the screen instead of floating over the page */
+.bubble-pop.docked { left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto; max-width: none;
+  border-radius: 14px 14px 0 0; padding-bottom: max(12px, env(safe-area-inset-bottom)); }

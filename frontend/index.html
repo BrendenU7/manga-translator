@@ -153,7 +153,7 @@
 
       <div id="viewer" class="translated">
         <figure class="orig"><img id="img-original" alt="Original page"><figcaption>Original</figcaption></figure>
-        <figure class="trans"><img id="img-translated" alt="Translated page"><span class="placeholder">No translation yet</span><figcaption>Translated</figcaption></figure>
+        <figure class="trans"><div class="trans-stage"><img id="img-translated" alt="Translated page"><div id="hotspots" aria-label="Click a bubble to adjust it"></div></div><span class="placeholder">No translation yet</span><figcaption>Translated</figcaption></figure>
         <figure class="compare-wrap">
           <div id="compare" class="compare" style="--pos: 50%">
             <img id="cmp-translated" alt="Translated page">
@@ -162,6 +162,20 @@
           </div>
           <figcaption>Drag to compare: original ← → translated</figcaption>
         </figure>
+      </div>
+
+      <!-- Floating editor for one bubble: opens when you click a bubble on the translated page -->
+      <div id="bubble-pop" class="bubble-pop" role="dialog" aria-label="Adjust this bubble" hidden>
+        <div class="pop-head"><b id="pop-title">Bubble</b>
+          <button type="button" id="pop-close" class="pop-close" aria-label="Close">✕</button></div>
+        <textarea id="pop-text" rows="2" aria-label="Translation"></textarea>
+        <div class="pop-tools">
+          <span class="size-ctl">Size <button type="button" id="pop-smaller" aria-label="Smaller text">−</button>
+            <b id="pop-size"></b><button type="button" id="pop-bigger" aria-label="Bigger text">+</button></span>
+          <label><input type="checkbox" id="pop-fit"> Fit to original box</label>
+        </div>
+        <div class="pop-move">Move <span class="nudge" id="pop-nudge"></span>
+          <span class="note">Changes show on the page right away.</span></div>
       </div>
 
       <div class="card editor">

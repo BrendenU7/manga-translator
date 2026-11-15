@@ -429,6 +429,8 @@ async function selectPage(id) {
     return;
   }
   // Not translated (yet): show the original, and for a failure, why + Retry buttons
+  closePop();
+  $("#hotspots").innerHTML = "";
   job = page;
   shownId = null;
   $("#img-original").src = page.original_url;
@@ -540,7 +542,9 @@ function showResult(page) {
   // Long webtoon strips scroll at full width instead of shrinking to the window height
   $("#img-translated").onload = (e) => {
     $("#compare").classList.toggle("strip", isStrip(e.target));
+    drawHotspots();
   };
+  if (popId !== null && page.id !== popPage) closePop();  // a different page: close the panel
   $("#edit-font").value = page.font_style || "manga";
   $("#download").href = page.translated_url;
   const stem = page.filename.split(" / ").pop().replace(/\.\w+$/, "");
@@ -632,6 +636,160 @@ $("#bubbles").addEventListener("click", (e) => {
   row.querySelector(".size-val").textContent = `${Math.round(scale * 100)}%`;
   saveEdits();
 });
+// ------------------------------------------------- edit on the page (click a bubble)
+// Each translated bubble gets an invisible click target over the translated image. Clicking
+// one opens a small floating panel with that bubble's text, Size, Fit and Move controls.
+// The panel just drives the same controls as the bubble's row in the editor list below,
+// so both always agree, and you see each change on the page right where you're looking.
+let popId = null;           // bubble id the floating panel is editing (null = closed)
+let popPage = null;         // page (job id) that bubble belongs to
+let popTextTimer = null;
+
+function bubbleRow(id) {
+  const ta = document.querySelector(`#bubbles textarea[data-id="${id}"]`);
+  return ta ? ta.closest(".bubble") : null;
+}
+
+// Where a bubble's text is drawn, in image pixels (mirrors typeset.py: Fit to original box
+// uses the original text box; Move shifts it).
+function bubbleRect(r) {
+  const b = (r.fit_original ? r.box : r.render_box) || r.box;
+  const dx = r.offset_x || 0, dy = r.offset_y || 0;
+  return [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy];
+}
+
+function drawHotspots() {
+  const layer = $("#hotspots"), img = $("#img-translated");
+  layer.innerHTML = "";
+  if (!job || job.status !== "done" || !img.naturalWidth) return;
+  const W = img.naturalWidth, H = img.naturalHeight;
+  for (const r of job.regions || []) {
+    if (!(r.translated_text || "").trim()) continue;
+    const [x1, y1, x2, y2] = bubbleRect(r);
+    const hs = document.createElement("button");
+    hs.type = "button";
+    hs.className = "hotspot" + (r.id === popId ? " selected" : "");
+    hs.dataset.id = r.id;
+    hs.title = `Bubble ${r.id + 1}: click to adjust`;
+    hs.setAttribute("aria-label", `Adjust bubble ${r.id + 1}`);
+    Object.assign(hs.style, {
+      left: `${Math.max(0, x1) / W * 100}%`, top: `${Math.max(0, y1) / H * 100}%`,
+      width: `${(Math.min(W, x2) - Math.max(0, x1)) / W * 100}%`,
+      height: `${(Math.min(H, y2) - Math.max(0, y1)) / H * 100}%`,
+    });
+    layer.appendChild(hs);
+  }
+  if (popId !== null) requestAnimationFrame(placePop);
+}
+
+$("#hotspots").addEventListener("click", (e) => {
+  const hs = e.target.closest(".hotspot");
+  if (hs) openPop(Number(hs.dataset.id));
+});
+
+function openPop(id) {
+  const row = bubbleRow(id);
+  if (!row) return;
+  popId = id;
+  popPage = job.id;
+  $("#pop-title").textContent = `Bubble ${id + 1}`;
+  $("#pop-text").value = row.querySelector("textarea").value;
+  document.querySelectorAll(".hotspot").forEach((h) => h.classList.toggle("selected", Number(h.dataset.id) === id));
+  document.querySelectorAll("#bubbles .bubble").forEach((b) => b.classList.toggle("active", b === row));
+  syncPop();
+  $("#bubble-pop").hidden = false;
+  placePop();
+}
+
+function closePop() {
+  popId = popPage = null;
+  placePop.scrollFor = null;
+  clearTimeout(popTextTimer);
+  $("#bubble-pop").hidden = true;
+  document.querySelectorAll(".hotspot.selected, #bubbles .bubble.active")
+    .forEach((el) => el.classList.remove("selected", "active"));
+}
+
+// Copy the row's current settings into the panel
+function syncPop() {
+  const row = popId !== null && bubbleRow(popId);
+  if (!row) return;
+  $("#pop-size").textContent = row.querySelector(".size-val").textContent;
+  $("#pop-fit").checked = row.querySelector(".fit-orig").checked;
+  $("#pop-nudge .nudge-reset").classList.toggle("moved", row.querySelector(".nudge-reset").classList.contains("moved"));
+}
+
+// Put the panel next to the bubble (right, else left, else below); on phones it docks
+// to the bottom of the screen so it never covers the bubble you're adjusting.
+function placePop() {
+  const pop = $("#bubble-pop");
+  if (pop.hidden || popId === null) return;
+  const hs = document.querySelector(`.hotspot[data-id="${popId}"]`);
+  const docked = window.innerWidth <= 600 || !hs;
+  pop.classList.toggle("docked", docked);
+  if (docked) {
+    pop.style.left = pop.style.top = "";
+    // Keep the bubble visible above the docked panel
+    if (hs && placePop.scrollFor !== popId) {
+      placePop.scrollFor = popId;
+      const r = hs.getBoundingClientRect(), free = window.innerHeight - pop.offsetHeight;
+      if (r.bottom > free - 8 || r.top < 8) window.scrollBy({ top: r.top - Math.max(8, (free - r.height) / 2), behavior: "smooth" });
+    }
+    return;
+  }
+  const r = hs.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 12;
+  let left = r.right + gap;
+  if (left + pw > window.innerWidth - 8) left = r.left - gap - pw;
+  let top = r.top + r.height / 2 - ph / 2;
+  if (left < 8) { left = r.left + r.width / 2 - pw / 2; top = r.bottom + gap; }
+  left = Math.min(Math.max(8, left), window.innerWidth - pw - 8);
+  top = Math.min(Math.max(8, top), window.innerHeight - ph - 8);
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+}
+window.addEventListener("resize", () => requestAnimationFrame(placePop));
+window.addEventListener("scroll", () => requestAnimationFrame(placePop), { passive: true });
+
+// Panel controls press the matching control in the bubble's row
+function rowControl(selector) {
+  const row = popId !== null && bubbleRow(popId);
+  return row ? row.querySelector(selector) : null;
+}
+$("#pop-smaller").addEventListener("click", () => { rowControl(".size-down")?.click(); syncPop(); });
+$("#pop-bigger").addEventListener("click", () => { rowControl(".size-up")?.click(); syncPop(); });
+$("#pop-fit").addEventListener("change", (e) => {
+  const box = rowControl(".fit-orig");
+  if (!box) return;
+  box.checked = e.target.checked;
+  box.dispatchEvent(new Event("change", { bubbles: true }));
+});
+// The panel's arrow pad is a copy of the row's; a click presses the same arrow in the row
+$("#pop-nudge").innerHTML = [
+  ["↖", "Move up-left"], ["↑", "Move up"], ["↗", "Move up-right"],
+  ["←", "Move left"], ["⟲", "Back to automatic position"], ["→", "Move right"],
+  ["↙", "Move down-left"], ["↓", "Move down"], ["↘", "Move down-right"],
+].map(([icon, label]) => `<button type="button" aria-label="${label}" title="${label}"`
+  + (icon === "⟲" ? ' class="nudge-reset"' : "") + `>${icon}</button>`).join("");
+$("#pop-nudge").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  rowControl(`.nudge button[aria-label="${b.getAttribute("aria-label")}"]`)?.click();
+  syncPop();
+});
+// Typing: copy into the row and redraw after a short pause
+$("#pop-text").addEventListener("input", (e) => {
+  const ta = rowControl("textarea");
+  if (!ta) return;
+  ta.value = e.target.value;
+  clearTimeout(popTextTimer);
+  popTextTimer = setTimeout(saveEdits, 700);
+});
+$("#pop-close").addEventListener("click", closePop);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && popId !== null) closePop(); });
+document.addEventListener("mousedown", (e) => {
+  if (popId !== null && !e.target.closest("#bubble-pop, .hotspot, #bubbles")) closePop();
+});
+
 // Arrow pad: move a bubble's text. One click = ~0.5% of the page width (5px on a 1024px
 // page); the middle button puts it back where the app placed it.
 $("#bubbles").addEventListener("click", (e) => {
@@ -752,6 +910,8 @@ document.querySelectorAll(".seg button").forEach((b) =>
   b.addEventListener("click", () => {
     document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("active", x === b));
     $("#viewer").className = b.dataset.view;
+    if (!["translated", "side"].includes(b.dataset.view)) closePop();
+    else requestAnimationFrame(placePop);
   }));
 
 // Opened from the dashboard (or reloaded): /index.html?batch=<id>
