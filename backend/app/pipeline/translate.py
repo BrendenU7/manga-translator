@@ -39,7 +39,8 @@ Rules:
 - The OCR is often wrong (misread or missing characters). {read_rule}
 - Use the whole page for context: who is speaking, what is happening, the series' terminology.
 - Keep translations concise: they must fit back into the same bubble.
-- If a bubble is already in {target}, keep it as is (fix obvious OCR errors only).
+- If a bubble or sign is already in {target}, return an empty string for it: the original
+  lettering is left untouched (not erased and redrawn), like sound effects.
 - Keep stammers and trailing dots ("Th-this is...", "Beast...!").
 - Do NOT translate sound effects (onomatopoeia drawn as part of the art, e.g. ドン, ゴゴゴ,
   쾅, 砰, BAM): return an empty string for them so the original lettering stays untouched.

@@ -418,3 +418,14 @@ def test_editor_bigger_text_works_in_a_tight_box():
 
     assert width(1.5) > width(1.0) * 1.2
     assert width(0.6) < width(1.0)
+
+
+def test_text_already_in_target_language_is_left_untouched():
+    """Claude is told to return "" for bubbles already in the target language, and the
+    pipeline leaves "" regions exactly as drawn (same path as sound effects)."""
+    from backend.app.pipeline import translate
+    r = TextRegion(id=0, box=(0, 0, 10, 10), source_text="HELLO")
+    system, _ = translate.build_messages([r], "auto", "en")
+    assert "already in English, return an empty string" in " ".join(system.split())
+    system_es, _ = translate.build_messages([r], "auto", "es")
+    assert "already in Spanish" in system_es
